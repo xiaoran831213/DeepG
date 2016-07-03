@@ -87,3 +87,10 @@ ENV/
 
 # Rope project settings
 .ropeproject
+
+# raw data, and intermediate data
+raw
+dat
+
+# backups
+*~

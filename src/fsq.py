@@ -38,6 +38,12 @@ NCB = {
     
     ('-', '-'): '-'}
 
+## FASTQ chromosome keys
+CKY = [
+    '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
+    '11', '12', '13', '14', '15', '16', '17', '18', '19',
+    '20', '21', '22', 'X', 'Y']
+    
 class VcfGvr:
     """
     Genomic variant from VCF record.
@@ -79,13 +85,16 @@ class VcfGvr:
 
         self.__pos__ += 1
         return gt
-    
+
+    def rewind(self):
+        self.__pos__ = 0
+
 class VcfSeq:
     """
     A iterator class to recover FASTQ sequences of all subjects
     from a VCF file  and its genotyping reference genome.
     """
-    def __init__(self, vgz, fsq, CHR = None, BP0 = None, NBP = None):
+    def __init__(self, vgz, fsq, CHR = None, BP0 = None, BP1 = None, NBP = None):
         """
         vgz: bgzipped VCF file, with tabix index.
         fsq: FASTQ file storing the reference genome
@@ -99,23 +108,39 @@ class VcfSeq:
         self.fsq = fsq
         self.CHR = CHR
         self.BP0 = BP0
+        self.BP1 = BP1
         self.NBP = NBP
 
-        ## actuall number of basepairs to fetch
-        self.__nbp__ = 0xFFFFFFFF if NBP is None or NBP < 1 else nbp
         
-        ## link to the *.fastq
-        self.__ref__ = Fasta(fsq, key_fn = lambda x: x.split()[0])
-
         ## link to the *.vcf.gz
-        self.__vcf__ = vcf.Reader(filename = vgz)
-        if CHR is not None:
-            self.__vcf__ = self.__vcf__.fetch(self.CHR, self.BP0, BP1)
+        vgz = vcf.Reader(filename = vgz)
+
+        ## link to the *.fastq
+        fsq = Fasta(fsq, key_fn = lambda x: x.split()[0])
+
+        ## the chromosome, starting and closing positions
+        ch = 0 if CHR is None else CHR
+        b0 = 0 if BP0 is None else BP0
+        b1 = len(fsq[CKY[ch]])
+        if BP1 is not None:
+            b1 = min(b1, BP1)
+        
+        ## retrict VCF range    
+        vgz = vgz.fetch(ch, b0, b1)
             
         ## sample size
         self.__ssz__ = len(self.__vcf__.samples)
 
-        ## previous site
+
+        ## chromosome, 0 based
+        self.__chr__ = if CHR is None fsq[CKY[0]] else fsq[CKY[CHR]]
+        
+        ## starting position, 0 based
+        self.__bp0__ = 0 if BP0 is None else BP0
+        ## ending position, 0 based, exclusive
+        self.__bp1__ = 
+
+        ## current position, 0 based
         self.__pos__ = 0 if BP0 is None else BP0
 
         ## the current locus
@@ -123,6 +148,26 @@ class VcfSeq:
             self.__gvr__  = next(self.__vcf__)
         except StopIteration as e:
             self.__gvr__  = e
+
+    def __advc__(self):
+        ## presumptively move the pointer one nucleotide forward
+        p = self.__pos__ + 1
+        c = self.__chr__
+
+        ## reaching the ending position
+        if c == self.CHR and p == self.BP1
+            return None
+        
+        ## advance to the next chromosome
+        if p == len(self.__ref__[CKY[c]]):
+            c = c + 1
+            p = 0
+
+        ## reaching the end of the reference sequence
+        if self.__chr__ == len(CKY):
+            return None
+
+        return True
 
     def __next__(self):
         ## reach the wanted number of nucleotide
@@ -132,15 +177,18 @@ class VcfSeq:
         ret = None
         
         ## are we going through a variant?
-        while(self.__gvr__ and self.__pos__ == self.__gvr__.POS):
+        while(self.__gvr__
+              and FCK[self.__chr__] == self.__gvr__.CHROM
+              and self.__pos__ == self.__gvr__.POS):
             ## the next nucleotide is in the variant
             try:
                 ret = next(self.__gvr__)
                 break
-            ## advance pointer for the reference sequence
+            ## try advance pointer for the reference sequence
             except StopIteration:
-                self.__pos__ += 1
-
+                if not self.__advc__():
+                    break
+                
             ## find the next variant
             try:
                 self.__gvr__  = next(self.__vcf__)
@@ -148,17 +196,24 @@ class VcfSeq:
             except StopIteration as e:
                 self.__gvr__  = None
 
+        if ret is not None:
+            return
+
+        ## declare the end of reference sequence
+            if self.__chr__ == len(FCK) or self.__chr__ == self.CHR
+            
         ## the next nucleotide is in the reference sequence
         if ret is None:
-            ## chromosome
-            c = self.__ref__[self.__vcf__.CHROM]
+            ## jump to the next chromosome if necessary
+            if self.__pos__ == len(self.__ref__[FCK[self.__chr__]]):
+                self.__chr__ += 1
+                self.__pos__ == 0
+
+            
+            ret = ref_chr[self.__pos__] * self.__ssz__
+                
             g = c[self.__pos__]
 
-            if(isinstance(self.__gvr__, StopIteration):
-        elif isinstance(self.__gvr__, StopIteration):
-            pass
-        else:
-            pass
         ## if self.__loc__ is None or self.__loc__.POS == self.__pos__ 
         ## self.__this__ = next(self.__gno__)
     
@@ -167,10 +222,12 @@ if __name__ == '__main__':
     ## add project root to python path
     import sys
 
-    ## human reference genome build 37, patch 5
-    ## fsq = load_ref('../raw/hs37d5.fa')
-
     ## 1000 genome data
     g1k = vcf.Reader(filename = '../raw/hs37d5/22.vcf.gz')
+
+
+
+
+
 
 

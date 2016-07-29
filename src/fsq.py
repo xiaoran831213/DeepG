@@ -4,7 +4,7 @@ from pyfasta import Fasta
 from random import randint
 from random import choice
 
-from dfs import CKY, NCB, NCB_ASC2INT
+from dfs import CKY, NCB
 
 from pdb import set_trace
 
@@ -181,7 +181,7 @@ class VcfSeq:
         return self.__fsq__[self.__pos__] * self.__ssz__
 
 
-def get_seq(vgz, fsq, chm=None, bp0=None, nbp=None, nmr=False):
+def get_seq(vgz, fsq, chm=None, bp0=None, nbp=None):
     """
     Restore part of the sequence from a reference sequence
     (FASTQ) and a variant file (VCF).
@@ -195,15 +195,16 @@ def get_seq(vgz, fsq, chm=None, bp0=None, nbp=None, nmr=False):
         nbp = 1024
 
     itr = VcfSeq(vgz, fsq, chm=chm, bp0=bp0)
-
-    ret = np.empty((nbp, itr.__ssz__), dtype='u1')
+    
+    # ret = np.empty((nbp, itr.__ssz__), dtype='u1')
+    ret = []
     for i in range(nbp):
-        ret[i, ] = [NCB_ASC2INT[j] for j in list(next(itr))]
+        ret.append(next(itr))
 
     return ret
 
 
-def rnd_vsq(vgz, fsq, chm=None, bp0=None, bp1=None, nbp=None):
+def rnd_vsq(vgz, fsq, chm=None, bp0=None, bp1=None, nbp=None, ssz = None, ncb=None):
     """
     Randomly draw some variable sequence from a reference
     sequence (FASTQ) and a variant file (VCF).
@@ -217,8 +218,11 @@ def rnd_vsq(vgz, fsq, chm=None, bp0=None, bp1=None, nbp=None):
     chm: chromosome to be sampled, zero based.
     bp0: initial position in the chromosome, zero based.
     nbp: number of basepairs to sample, (defaut=1024).
+
+    ncb: nucleotide coding base, can be str or int.
     """
     nbp = 1024 if nbp is None else nbp
+    ssz = 1 if ssz is None else ssz
 
     # link to the *.vcf.gz
     vgz = vcf.Reader(filename=vgz)
@@ -242,8 +246,9 @@ def rnd_vsq(vgz, fsq, chm=None, bp0=None, bp1=None, nbp=None):
 
     # locate one variant with large window, fetch the small
     # region around it, try it 10 times.
-    pos, trl = None, 0
-    while pos is None and trl < 10:
+    n = 0                     # number of samples
+    pos = None
+    while pos is None:
         pos = randint(bp0, bp1 - nbp - 1)
         try:
             pos = next(vgz.fetch(chm, pos, bp1)).start
@@ -251,51 +256,53 @@ def rnd_vsq(vgz, fsq, chm=None, bp0=None, bp1=None, nbp=None):
             pos = None
             trl = trl + 1
     
-    nbp = int(nbp/2)
-    pos = max(pos, bp0 + nbp)
-    pos = min(pos, bp1 - nbp)
-    bp0, bp1 = pos - nbp, pos + nbp
+    pos = max(pos, bp0 + int(nbp/2))
+    pos = min(pos, bp1 - nbp + int(nbp/2))
+    bp0, bp1 = pos - int(nbp/2), pos + nbp - int(nbp/2)
 
     gvr = [g for g in vgz.fetch(chm, bp0, bp1) if bp0 <= g.start < bp1]
-    fsq = list(fsq[bp0:bp1])
-    fsq = [fsq.copy(), fsq.copy()]
-
+    pos = bp0
+    seq = [[], []]              # 2 copies of chromosome
     # randomly pick one allele for the two copies of sequences
     for v in gvr:
+        # static sequence between the previous and current variant
+        seq[0].append(fsq[pos:v.start])
+        seq[1].append(fsq[pos:v.start])
+
+        # the current variant
         al = exp_allele(v.REF, v.ALT)
-        ix = v.start - bp0
-        try:
-            fsq[0][ix], fsq[1][ix] = choice(al), choice(al)
-        except:
-            set_trace()
-            pass
+        seq[0].append(choice(al))
+        seq[1].append(choice(al))
+        # advance the pointer
+        pos = v.start + len(seq[1][-1])
+
+    # rest of the sequence
+    seq[0].append(fsq[pos:bp1])
+    seq[1].append(fsq[pos:bp1])
 
     # unlist the sequence
-    fsq[0] = [x for a in fsq[0] for x in a]
-    fsq[1] = [x for a in fsq[1] for x in a]
-    fsq = ''.join([NCB[x] for x in zip(*fsq)])
-    return fsq[0:nbp]
+    seq[0] = ''.join(seq[0])
+    seq[1] = ''.join(seq[1])
+
+    # get nucleotide coding bases
+    ncb = NCB[ncb]
+    seq = [ncb[x] for x in zip(*seq)]
+    return seq
 
 
 def test1():
-    vgz = '../raw/hs37d5/22.vcf.gz'
+    vgz = '../raw/wgs/22.vcf.gz'
     fsq = '../raw/hs37d5.fa'
     # r = VcfSeq(vgz, fsq, chm=22 - 1, bp0=16050072)
-    r = VcfSeq(vgz, fsq, chm=22 - 1, bp0=16050650)
-    # r = get_seq(vgz, fsq, chm=22 - 1, bp0=16050650, nmr=True)
-    # r = get_seq(vgz, fsq, chm=22 - 1, bp0=14050650, nmr=True)
+    # r = VcfSeq(vgz, fsq, chm=22 - 1, bp0=16050650)
+    r = get_seq(vgz, fsq, chm=22 - 1, bp0=16050650)
+    # r = get_seq(vgz, fsq, chm=22 - 1, bp0=14050650)
     return r
 
 
 def test2():
-    vgz = '../raw/hs37d5/19.vcf.gz'
+    vgz = '../raw/gvr/19.vcf.gz'
     fsq = '../raw/hs37d5.fa'
-    ret = rnd_vsq(vgz, fsq, nbp=1000)
+    ret = rnd_vsq(vgz, fsq, nbp=500)
+        
     return ret
-
-if __name__ == '__main__':
-    """
-    tests.
-    """
-    v1=vcf.Reader('../raw/hs37d5/21.vcf.gz')
-    print("aa")

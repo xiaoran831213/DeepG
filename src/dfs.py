@@ -1,7 +1,7 @@
 # common definitions
 
 # nucleotide code Base, ASCII
-NCB = {
+NCB_ASC = {
     ('A', 'A'): 'A',                       # Adenine
     ('C', 'C'): 'C',                       # Cytosine
     ('G', 'G'): 'G',                       # Guanine
@@ -34,27 +34,41 @@ NCB = {
     ('-', '-'): '-',
     ('N', 'N'): 'N'}
 
-# nucleotide code base, Integer
-NCB_ASC2INT = {
-    'N': 0x00,                            # Anything
-    'A': 0x01,                            # Adenine
-    'C': 0x02,                            # Cytosine
-    'G': 0x03,                            # Guanine
-    'T': 0x04,                            # Thymine
+# nucleotide code base, ascii number
+NCB_INT = {
+    ('N', 'N'): 0x00,           # Anything
+    ('A', 'A'): 0x01,           # Adenine
+    ('C', 'C'): 0x02,           # Cytosine
+    ('G', 'G'): 0x03,           # Guanine
+    ('T', 'T'): 0x04,           # Thymine
 
-    'R': 0x05,
-    'Y': 0x06,
-    'S': 0x07,
-    'W': 0x08,
-    'K': 0x09,
-    'M': 0x0A,
+    ('A', 'G'): 0x05,
+    ('C', 'T'): 0x06,
+    ('G', 'C'): 0x07,
+    ('A', 'T'): 0x08,
+    ('G', 'T'): 0x09,
+    ('A', 'C'): 0x0A,
 
-    'B': 0x0B,
-    'D': 0x0C,
-    'H': 0x0D,
-    'V': 0x0E,
+    ('G', 'A'): 0x05,
+    ('T', 'C'): 0x06,
+    ('C', 'G'): 0x07,
+    ('T', 'A'): 0x08,
+    ('T', 'G'): 0x09,
+    ('C', 'A'): 0x0A,
 
-    '-': 0x0F}
+    ('A', '-'): 0x0B,
+    ('C', '-'): 0x0C,
+    ('G', '-'): 0x0D,
+    ('T', '-'): 0x0E,
+
+    ('-', 'A'): 0x0B,
+    ('-', 'C'): 0x0C,
+    ('-', 'G'): 0x0D,
+    ('-', 'T'): 0x0E,
+
+    ('-', '-'): 0x0F}
+
+NCB = {None: NCB_ASC, str: NCB_ASC, int: NCB_INT}
 
 # chromosome keys
 CKY = [

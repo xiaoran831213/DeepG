@@ -204,90 +204,117 @@ def get_seq(vgz, fsq, chm=None, bp0=None, nbp=None):
     return ret
 
 
-def rnd_vsq(vgz, fsq, chm=None, bp0=None, bp1=None, nbp=None, ssz = None, ncb=None):
+class RndVsq:
     """
     Randomly draw some variable sequence from a reference
     sequence (FASTQ) and a variant file (VCF).
-
-    vgz: name of the bgzipped VCF file (*.vcf.gz), if None,
-    only the reference genome will be returned.
-
-    fsq: the reference sequence file in FASTQ format, it must
-    not be None.
-
-    chm: chromosome to be sampled, zero based.
-    bp0: initial position in the chromosome, zero based.
-    nbp: number of basepairs to sample, (defaut=1024).
-
-    ncb: nucleotide coding base, can be str or int.
     """
-    nbp = 1024 if nbp is None else nbp
-    ssz = 1 if ssz is None else ssz
+    def __init__(self, vgz, fsq,
+                 chm=None, bp0=0, bp1=None, wnd=1024, ncb=str):
+        """
+        vgz: name of the bgzipped VCF file (*.vcf.gz), if None,
+        only the reference genome will be returned.
 
-    # link to the *.vcf.gz
-    vgz = vcf.Reader(filename=vgz)
+        fsq: the reference sequence file in FASTQ format, it must
+        not be None.
 
-    # link to the *.fastq
-    fsq = Fasta(fsq, key_fn=lambda x: x.split()[0])
+        chm: chromosome to be sampled, zero based.
+        bp0: initial position in the chromosome, zero based.
+        wnd: sample window size, (defaut=1024).
 
-    # get the first variant
-    gvr = next(vgz)
+        ncb: nucleotide coding base, can be str or int.
+        """
+        self.VGZ = vgz
+        self.FSQ = fsq
 
-    # the chromosome
-    chm = gvr.CHROM if chm is None else CKY[chm]
-    fsq = fsq[chm]
+        # link to the *.vcf.gz
+        vgz = vcf.Reader(filename=vgz)
 
-    # starting and ending positions
-    bp0 = 0 if bp0 is None else bp0
-    bp1 = len(fsq) if bp1 is None else min(len(fsq), bp1)
+        # link to the *.fastq
+        fsq = Fasta(fsq, key_fn=lambda x: x.split()[0])
 
-    if bp1 < bp0 + nbp:
-        raise Exception('bp0 + nbp > bp1')
+        # get the first variant
+        gvr = next(vgz)
 
-    # locate one variant with large window, fetch the small
-    # region around it, try it 10 times.
-    n = 0                     # number of samples
-    pos = None
-    while pos is None:
-        pos = randint(bp0, bp1 - nbp - 1)
-        try:
-            pos = next(vgz.fetch(chm, pos, bp1)).start
-        except StopIteration:
-            pos = None
-            trl = trl + 1
-    
-    pos = max(pos, bp0 + int(nbp/2))
-    pos = min(pos, bp1 - nbp + int(nbp/2))
-    bp0, bp1 = pos - int(nbp/2), pos + nbp - int(nbp/2)
+        # the chromosome
+        chm = gvr.CHROM if chm is None else CKY[chm]
+        fsq = fsq[chm]
+        self.CHM = chm
 
-    gvr = [g for g in vgz.fetch(chm, bp0, bp1) if bp0 <= g.start < bp1]
-    pos = bp0
-    seq = [[], []]              # 2 copies of chromosome
-    # randomly pick one allele for the two copies of sequences
-    for v in gvr:
-        # static sequence between the previous and current variant
-        seq[0].append(fsq[pos:v.start])
-        seq[1].append(fsq[pos:v.start])
+        # starting and ending positions
+        bp1 = len(fsq) if bp1 is None else min(len(fsq), bp1)
+        self.BP0 = bp0
+        self.BP1 = bp1
 
-        # the current variant
-        al = exp_allele(v.REF, v.ALT)
-        seq[0].append(choice(al))
-        seq[1].append(choice(al))
-        # advance the pointer
-        pos = v.start + len(seq[1][-1])
+        # sanity check
+        if bp1 - bp0 < 1024:
+            raise Exception('bp1 - bp0 < 1024!')
 
-    # rest of the sequence
-    seq[0].append(fsq[pos:bp1])
-    seq[1].append(fsq[pos:bp1])
+        # nucleited encoding
+        self.NCB = ncb
+        ncb = NCB[ncb]
 
-    # unlist the sequence
-    seq[0] = ''.join(seq[0])
-    seq[1] = ''.join(seq[1])
+        # private members
+        self.__vgz__ = vgz
+        self.__fsq__ = fsq
+        self.__gvr__ = gvr
+        self.__chm__ = chm
+        self.__fsq__ = fsq
+        self.__bp0__ = bp0
+        self.__bp1__ = bp1
+        self.__wnd__ = wnd
+        self.__ncb__ = ncb
+        self.__mem__ = []
 
-    # get nucleotide coding bases
-    ncb = NCB[ncb]
-    seq = [ncb[x] for x in zip(*seq)]
-    return seq
+    def get_seq(self):
+        # locate one variant first, then fetch the surrounding region.
+        vz = self.__vgz__
+        ch = self.__chm__
+        ps = None
+        while ps is None:
+            ps = randint(self.__bp0__, self.__bp1__ - 1)
+            try:
+                ps = next(vz.fetch(ch, ps, self.__bp1__)).start
+            except StopIteration:
+                ps = None
+
+        # half left & half right
+        hl = int(self.__wnd__/2); hr = self.__wnd__ - hl
+        # startign and ending basepair
+        ps = max(ps, self.__bp0__ + hl)
+        ps = min(ps, self.__bp1__ - hr)
+        st, ed = ps - hl, ps + hl
+
+        gvr = [g for g in self.__vgz__.fetch(ch, st, ed)]
+        ps = st
+        s0, s1 = [], []              # 2 copies of chromosome
+        # randomly pick one allele for the two copies of sequences
+        for v in gvr:
+            # the static sequence between previous and current variant
+            s0.append(self.__fsq__[ps:v.start])
+            s1.append(self.__fsq__[ps:v.start])
+            # the current variant
+            al = exp_allele(v.REF, v.ALT)
+            s0.append(choice(al))
+            s1.append(choice(al))
+            # advance the pointer
+
+            # advance the reference pointer
+            ps = v.start + len(v.REF)
+
+        # rest of the sequence
+        s0.append(self.__fsq__[ps:ed])
+        s1.append(self.__fsq__[ps:ed])
+
+        # unlist the sequence
+        s0 = ''.join(s0)
+        s1 = ''.join(s1)
+
+        # get nucleotide coding bases
+        sq = [self.__ncb__[x] for x in zip(s0, s1)]
+        if self.NCB is str:
+            sq = ''.join(sq)
+        return sq
 
 
 def test1():
@@ -301,8 +328,7 @@ def test1():
 
 
 def test2():
-    vgz = '../raw/gvr/19.vcf.gz'
+    vgz = '../raw/ann/19.vcf.gz'
     fsq = '../raw/hs37d5.fa'
-    ret = rnd_vsq(vgz, fsq, nbp=500)
-        
+    ret = RndVsq(vgz, fsq, ncb=int)
     return ret

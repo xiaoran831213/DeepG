@@ -2,10 +2,10 @@
 
 # nucleotide code Base, ASCII
 NCB_ASC = {
-    ('A', 'A'): 'A',                       # Adenine
-    ('C', 'C'): 'C',                       # Cytosine
-    ('G', 'G'): 'G',                       # Guanine
-    ('T', 'T'): 'T',                       # Thymine
+    ('A', 'A'): 'A',            # Adenine
+    ('C', 'C'): 'C',            # Cytosine
+    ('G', 'G'): 'G',            # Guanine
+    ('T', 'T'): 'T',            # Thymine
 
     ('A', 'G'): 'R',
     ('C', 'T'): 'Y',

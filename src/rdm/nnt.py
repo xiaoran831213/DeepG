@@ -1,17 +1,19 @@
 from .hlp import parms
 from .hlp import is_tnsr
+from .hlp import T
 
 
 class Nnt(list):
     """
     Generic layer of neural network
     """
-    def __init__(self, tag=None):
+    def __init__(self, tag=None, **kwd):
         """
         Initialize the neural network base object.
         tag: a short description of the network.
         """
         self.tag = tag
+        self.__dict__.update(kwd)
 
     def y(self, x):
         """
@@ -25,10 +27,14 @@ class Nnt(list):
         """
         makes the network a callable object.
         """
-        if is_tnsr(x):
-            return self.__expr__(x)
-        else:
-            return lambda u: self.__expr__(x(u))
+        return self.__expr__(x)
+
+    def __show__(self):
+        """
+        demonstrate the network with a temporary tensor input.
+        """
+        x = T.matrix('x')
+        print(self.__expr__(x))
 
     def __expr__(self, x):
         """

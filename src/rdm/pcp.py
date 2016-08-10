@@ -5,15 +5,16 @@ from .hlp import T
 from .nnt import Nnt
 
 
-class Lyr(Nnt):
+class Pcp(Nnt):
     """
-    Generic layer of neural network
+    A Perceptron, which is the full linear recombination of the input
+    elements and a bias(or intercept), followed by an per-element non-
+    linear transformation(usually sigmoid).
     """
-
-    def __init__(self, dim, w=None, b=None, s=None, tag=None):
+    def __init__(self, dim, w=None, b=None, s=None, tag=None, **kwd):
         """
-        Initialize the neural network layer class by specifying the the
-        dimension of the input, and the dimension of the output.
+        Initialize the perceptron by specifying the the dimension of input
+        and output.
         The constructor also receives symbolic variables for the input,
         weights and bias. Such a symbolic variables are useful when, for
         example, the input is the result of some computations, or when
@@ -33,7 +34,7 @@ class Lyr(Nnt):
         By default the sigmoid function is used.
         To suppress nonlinearity, specify 1 instead.
         """
-        super(Lyr, self).__init__(tag)
+        super(Pcp, self).__init__(tag, **kwd)
 
         # I/O dimensions
         self.dim = dim
@@ -66,29 +67,22 @@ class Lyr(Nnt):
             s = T.nnet.sigmoid
         self.s = s
 
-    # a Lyr cab be represented by the nonlinear funciton and I/O dimensions
+    # a Pcp cab be represented by the nonlinear funciton and I/O dimensions
     def __repr__(self):
-        return '{}({}-{})'.format(
+        return '{}({}X{})'.format(
             str(self.s)[0].upper(), self.dim[0], self.dim[1])
 
     def __expr__(self, x):
-        """ build symbolic expression of {y} given {x} """
+        """ build symbolic expression of {y} given {x}.
+        For a perceptron, it is the full linear recombination of the
+        input elements and an bias(or intercept), followed by an
+        element-wise non-linear transformation(usually sigmoid)
+        """
         affin = T.dot(x, self.w) + self.b
         if self.s is 1:
             return affin
         else:
             return self.s(affin)
-        
-    def y(self, x):
-        """
-        build symbolic expression of layer output {y} given input {x},
-        which is also the defaut expression returned when the Lyr object
-        is being called as a function
-        """
-        if hlp.is_tnsr(x):
-            return self.__expr__(x)
-        else:
-            return lambda u: self.__expr__(x(u))
 
 
 def test_lyr():
@@ -98,7 +92,7 @@ def test_lyr():
     d = (x.shape[1], x.shape[1] / 2)
     x = hlp.rescale01(x)
 
-    nt = Lyr(dim=d)
+    nt = Pcp(dim=d)
     return x, nt
 
 

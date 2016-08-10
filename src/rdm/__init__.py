@@ -1,6 +1,5 @@
-print "Initialize RDM"
-
-import da
-import sda
-
-print "Done"
+print("Initialize RDM")
+import sys
+import os
+from . import hlp
+print("Done")

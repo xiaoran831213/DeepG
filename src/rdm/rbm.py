@@ -431,14 +431,14 @@ def test_rbm(learning_rate=0.1, training_epochs=15,
     start_time = timeit.default_timer()
 
     # go through training epochs
-    for epoch in xrange(training_epochs):
+    for epoch in range(training_epochs):
 
         # go through the training set
         mean_cost = []
-        for batch_index in xrange(n_train_batches):
+        for batch_index in range(n_train_batches):
             mean_cost += [train_rbm(batch_index)]
 
-        print 'Training epoch %d, cost is ' % epoch, numpy.mean(mean_cost)
+        print('Training epoch %d, cost is ' % epoch, numpy.mean(mean_cost))
 
         # Plot filters after each training epoch
         plotting_start = timeit.default_timer()
@@ -459,7 +459,7 @@ def test_rbm(learning_rate=0.1, training_epochs=15,
 
     pretraining_time = (end_time - start_time) - plotting_time
 
-    print ('Training took %f minutes' % (pretraining_time / 60.))
+    print('Training took %f minutes' % (pretraining_time / 60.))
     # end-snippet-5 start-snippet-6
     #################################
     #     Sampling from the RBM     #
@@ -518,11 +518,11 @@ def test_rbm(learning_rate=0.1, training_epochs=15,
         (29 * n_samples + 1, 29 * n_chains - 1),
         dtype='uint8'
     )
-    for idx in xrange(n_samples):
+    for idx in range(n_samples):
         # generate `plot_every` intermediate samples that we discard,
         # because successive samples in the chain are too correlated
         vis_mf, vis_sample = sample_fn()
-        print ' ... plotting sample ', idx
+        print(' ... plotting sample ', idx)
         image_data[29 * idx:29 * idx + 28, :] = tile_raster_images(
             X=vis_mf,
             img_shape=(28, 28),

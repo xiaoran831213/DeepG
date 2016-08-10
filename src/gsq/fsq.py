@@ -1,12 +1,9 @@
-import numpy as np
 import vcf
 from pyfasta import Fasta
 from random import randint
 from random import choice
 
 from dfs import CKY, NCB
-
-from pdb import set_trace
 
 
 def exp_allele(ref, alt):

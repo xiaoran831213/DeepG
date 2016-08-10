@@ -1,9 +1,9 @@
 import numpy as np
-import hlp
-from hlp import T
-from hlp import S
+from . import hlp
+from .hlp import T
+from .hlp import S
 import pdb
-import cPickle
+import pickle
 import theano
 
 def dist_ce(y, z):
@@ -212,7 +212,7 @@ class Trainer(object):
             j = self.bat.get_value().item() # batch index
             if  i < pN or j < b0:
                 continue
-            print pF.format(i=i, c=self.ecst().item(), g=self.gsum().item())
+            print(pF.format(i=i, c=self.ecst().item(), g=self.gsum().item()))
             pN = i + npt        # update print epoch
 
 def test_trainer():

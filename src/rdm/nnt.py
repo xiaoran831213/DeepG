@@ -1,6 +1,4 @@
-from .hlp import parms
-from .hlp import is_tnsr
-from .hlp import T
+from .hlp import parms, T
 
 
 class Nnt(list):
@@ -29,13 +27,6 @@ class Nnt(list):
         """
         return self.__expr__(x)
 
-    def __show__(self):
-        """
-        demonstrate the network with a temporary tensor input.
-        """
-        x = T.matrix('x')
-        print(self.__expr__(x))
-
     def __expr__(self, x):
         """
         build symbolic expression of output given input. x is supposdly
@@ -54,3 +45,13 @@ class Nnt(list):
         return '{}{}'.format(
             "" if self.tag is None else self.tag,
             super(Nnt, self).__repr__())
+
+
+def test_nnt():
+    # local test
+    nnt = Nnt(tag='test')
+    d = T.matrix('x')
+    e = nnt(d)
+    p = parms(nnt)
+
+    print(d, e, p)

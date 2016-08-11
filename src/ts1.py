@@ -9,10 +9,10 @@ from gsq.dsq import RndDsq
 from pdb import set_trace as ST
 
 
-def get_data(n=100, m=512):
+def get_data(n=100, m=512, f='../raw/ann/03.vcf.gz'):
     """ get dosage data """
     # raw dosage value in {0, 1, 2}
-    itr = RndDsq('../raw/ann/04.vcf.gz', wnd=m)
+    itr = RndDsq(f, wnd=m)
     dat = [[int(j) for j in next(itr)] for i in range(n)]
 
     # numpy float, rescaled to [0, 1]
@@ -99,3 +99,20 @@ def test_one(x, out=None):
     if type(out) is str:
         fo.close()
     return t1
+
+
+def test_two(nnt=None, dat=None):
+    hlp.set_seed(None)
+
+    if nnt is None:
+        ec0 = Pcp([512, 256])
+        dc0 = Pcp([256, 512])
+        nnt = Cat(ec0, dc0)
+
+    if dat is None:
+        dat = get_data(200, 512, '../raw/wgs/03.vcf.gz')
+    
+    trainer = Trainer(nnt, src=dat, dst=dat, lrt=0.005)
+    trainer.tune()
+
+    return nnt

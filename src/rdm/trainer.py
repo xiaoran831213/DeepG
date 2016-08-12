@@ -1,8 +1,8 @@
 import numpy as np
+import theano.tensor as T
 
 from . import hlp
-from .hlp import S, T, F
-import pdb
+from .hlp import S, F
 
 
 def dist_ce(y, z):
@@ -120,7 +120,7 @@ class Trainer(object):
         assert mmt < 1.0 and mmt >= 0.0
         self.mmt = S(mmt, 'mmt')
 
-        # learning lrt
+        # learning rate
         lrt = 0.01 if lrt is None else lrt
         self.lrt = S(lrt, 'lrt')
 

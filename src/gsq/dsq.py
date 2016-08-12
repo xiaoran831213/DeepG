@@ -1,6 +1,7 @@
 # generate dosage sequence from VCF
 import vcf
 from random import randint
+from random import random
 from gsq.dfs import CKY
 import pdb
 
@@ -58,11 +59,11 @@ class DsgSeq:
                 gvr = None
 
         # private members
-        self.__pos__ = bp0      # the pointer
-        self.__gvr__ = gvr      # the variant
-        self.__vgz__ = vgz      # vcf reader
-        self.__bp0__ = bp0      # starting position
-        self.__bp1__ = bp1      # ending position
+        self.__pos__ = bp0  # the pointer
+        self.__gvr__ = gvr  # the variant
+        self.__vgz__ = vgz  # vcf reader
+        self.__bp0__ = bp0  # starting position
+        self.__bp1__ = bp1  # ending position
 
     def __next__(self):
         """
@@ -101,7 +102,9 @@ class RndDsq:
     """
     Randomly draw some sequence from a variant file (VCF).
     """
-    def __init__(self, vgz, chm=None, bp0=None, bp1=None, wnd=1024):
+
+    def __init__(
+            self, vgz, chm=None, bp0=None, bp1=None, wnd=1024, dsg='012'):
         """
         vgz: name of the bgzipped VCF file (*.vcf.gz), if None,
         only the reference genome will be returned.
@@ -109,6 +112,9 @@ class RndDsq:
         chm: chromosome to be sampled, zero based.
         bp0: initial position in the chromosome, zero based.
         wnd: sample window size, (defaut=1024).
+        dsg: encoding for alternative allele count 0, 1, and 2; use '012' for
+        additive, '022' for dominative, and '002' for recessive encoding. The
+        default scheme is addtive, '012'.
         """
         self.VGZ = vgz
 
@@ -148,6 +154,7 @@ class RndDsq:
         self.__bp0__ = bp0
         self.__bp1__ = bp1
         self.__wnd__ = wnd
+        self.__dsg__ = dsg
         self.__mem__ = []
 
     def __next__(self):
@@ -163,7 +170,7 @@ class RndDsq:
                 ps = None
 
         # half left & half right
-        hl = int(self.__wnd__/2)
+        hl = int(self.__wnd__ / 2)
         hr = self.__wnd__ - hl
 
         # startign and ending basepair
@@ -179,32 +186,31 @@ class RndDsq:
 
         # randomly pick one allele for the two copies of sequences
         for v in vs:
-            # sample current variant by allele frequency
-            c1 = v.num_hom_ref + 1
-            c2 = c1 + v.num_het + 1
-            c3 = c2 + v.num_hom_alt + 1
-            al = randint(0, c3)
-            if al < c1:
-                al = '0'
-            elif al < c2:
-                al = '1'
+            # get allele frequency
+            af = v.INFO.get('AF')
+            if af:
+                af = sum(af)
             else:
-                al = '2'
+                af = max(1, v.num_het + 2 * v.num_hom_alt) / max(
+                    len(v.samples), 2)
+
+            # generate alleles
+            al = self.__dsg__[int(random() < af) + int(random() < af)]
 
             # a) current variant is ahead of the previous one, fill up the
             # gap in between
-            if(v.start > ps):
+            if (v.start > ps):
                 sq.append('0' * (v.start - ps))
 
             # b) current is overlapping with the previous one, indicating a
             # multi-allelic locus, and an extra chance to get ALT allele
-            if(v.start < ps):
-                al = str(max(2, int(sq.pop()) + int(al)))
+            if (v.start < ps):
+                al = self.__dsg__[max(2, int(sq.pop()) + int(al))]
 
             # update the nucleotide pointer
             sq.append(al)
             ps = v.start + 1
-            
+
         # pad the sequence if necessary
         if ps < ed:
             sq.append('0' * (ed - ps))

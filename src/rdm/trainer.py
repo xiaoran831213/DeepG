@@ -172,10 +172,10 @@ class Trainer(object):
             up.append((p, p - self.lrt * h))
 
         # update batch and eqoch index
-        bat_next = (((self.bat + 1) * self.bsz) % self.src.shape[0]) // self.bsz
-        eph_next = self.eph + ((self.bat + 1) * self.bsz) // self.src.shape[0]
-        up.append((self.bat, bat_next))
-        up.append((self.eph, eph_next))
+        uBat = (((self.bat + 1) * self.bsz) % self.src.shape[0]) // self.bsz
+        uEph = self.eph + ((self.bat + 1) * self.bsz) // self.src.shape[0]
+        up.append((self.bat, uBat))
+        up.append((self.eph, uEph))
 
         # from theano.ifelse import ifelse
         # gsum_prev = S(0.0)      # previous sum gradient

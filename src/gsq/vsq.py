@@ -1,21 +1,19 @@
-# generate dosage sequence from VCF
+# dosage variants sequence from VCF
 from vcf import Reader as vcfR
 from random import randint
 from random import random
 from gsq.dfs import CKY
-from pdb import set_trace
+import numpy as np
 
 
-class DsgSeq:
+class DsgVsq:
     """
-    A iterator class to recover FASTQ sequences of all subjects
-    from a VCF file  and its genotyping reference genome.
+    A iterator class to fetch dosage values from a VCF file.
     """
 
-    def __init__(self, vgz, chm=None, bp0=None, bp1=None, sbj=None):
+    def __init__(self, vgz, chm=None, bp0=0, bp1=None, wnd=1024, dsg='012'):
         """
         vgz: bgzipped VCF file, with tabix index.
-        fsq: FASTQ file storing the reference genome
         chm: the chromosome
         bp0: the starting basepair, 0 based, inclusive
         bp1: the ending basepair, 0 based, exclusive
@@ -33,12 +31,6 @@ class DsgSeq:
         chm = gv1.CHROM if chm is None else CKY[chm]
         cln = vgz.contigs[chm].length
 
-        # starting position
-        if not bp0:
-            bp0 = gv1.start
-        elif bp0 < 0:
-            bp0 = gv1.start + bp0
-
         # ending position
         if not bp1:
             bp1 = cln
@@ -48,59 +40,40 @@ class DsgSeq:
         # restrict VCF range
         vgz = vgz.fetch(chm, bp0, bp1)
 
-        # find the first locus in the region
-        gvr = None
-        while gvr is None:
-            try:
-                gvr = next(vgz)
-            except StopIteration:
-                break
-            if gvr.start < bp0:
-                gvr = None
-
         # private members
         self.__pos__ = bp0  # the pointer
-        self.__gvr__ = gvr  # the variant
         self.__vgz__ = vgz  # vcf reader
         self.__bp0__ = bp0  # starting position
         self.__bp1__ = bp1  # ending position
+        self.__wnd__ = wnd
+        self.__dsg__ = dsg
 
     def __next__(self):
-        """
-        Iterator core method.
-        """
-        # anounce the end of the reference sequence
-        if not self.__pos__ < self.__bp1__:
-            raise StopIteration()
-
-        # return dosage values if the pointer is on a variant
-        if self.__gvr__ and self.__pos__ == self.__gvr__.start:
-            # get dosage values
-            dsg = [int(g.gt_alleles[0] > '0') + int(g.gt_alleles[1] > '0')
-                   for g in self.__gvr__.samples]
-
-            # advance pointer by the size of variant
-            self.__pos__ = self.__gvr__.end
-
-            # locate next variant
+        d = np.zeros((len(self.__vgz__.samples), self.__wnd__), '<i1')
+        i = 0
+        while(i < self.__wnd__):
+            # get next variant
             try:
-                self.__gvr__ = next(self.__vgz__)
-            except StopIteration:
-                self.__gvr__ = None
-        else:
-            # return 0 for all subjects if the pointer is not on a variant
-            dsg = [0] * len(self.__vgz__.samples)
+                v = next(self.__vgz__)
+            except StopIteration as e:
+                raise e
+            
+            # get dosage values
+            v = [int(g.gt_alleles[0] > '0') +
+                 int(g.gt_alleles[1] > '0') for g in v.samples]
+            d[:, i] = np.array(v, '<i1')
+            i = i+1
 
-            # advance the point by 1 nucleotide
-            self.__pos__ += 1
+        # the coding of allele counts
+        d = np.array([int(c) for c in self.__dsg__], '<i1')[d]
+        
+        return d
+                   
 
-        dsg = ''.join([str(g) for g in dsg])
-        return dsg
-
-
-class RndDsq:
+class RndVsq:
     """
-    Randomly draw some sequence from a variant file (VCF).
+    Randomly draw a squence of variants from a variant file (VCF), ignoring
+    non-variants in between.
     """
 
     def __init__(
@@ -142,10 +115,6 @@ class RndDsq:
             bp1 = cln + bp1
         self.BP1 = bp1
 
-        # sanity check
-        if bp1 - bp0 < 1024:
-            raise Exception('bp1 - bp0 < 1024!')
-
         # private members
         self.__vgz__ = vgz
         self.__gvr__ = gv1
@@ -158,29 +127,18 @@ class RndDsq:
 
     def __next__(self):
         # locate one variant first, then fetch the surrounding region.
-        vz = self.__vgz__
-        ch = self.__chm__
-        ps = None
-        while ps is None:
-            ps = randint(self.__bp0__, self.__bp1__ - 1)
-            try:
-                ps = next(vz.fetch(ch, ps, self.__bp1__)).start
-            except StopIteration:
-                ps = None
-
-        # startign and ending basepair
-        st = max(ps - randint(0, self.__wnd__-1), self.__bp0__)
-        st = min(st, self.__bp1__ - self.__wnd__)
-        ed = st + self.__wnd__
+        ps = randint(self.__bp0__, self.__bp1__ - 1)
 
         # find variants in the sample window
-        vs = [g for g in self.__vgz__.fetch(ch, st, ed) if st <= g.start]
+        vz = self.__vgz__.fetch(self.__chm__, ps)
 
-        # initizlize pointer, and dosage value sequence
-        ps, sq = st, []
+        sq = []
+        while len(sq) < self.__wnd__:
+            try:
+                v = next(vz)
+            except StopIteration:
+                break
 
-        # randomly pick one allele for the two copies of sequences
-        for v in vs:
             # get allele frequency
             af = v.INFO.get('AF')
             if af:
@@ -192,23 +150,12 @@ class RndDsq:
             # generate alleles
             al = self.__dsg__[int(random() < af) + int(random() < af)]
 
-            # a) current variant is ahead of the previous one, fill up the
-            # gap in between
-            if (v.start > ps):
-                sq.append('0' * (v.start - ps))
-
-            # b) current is overlapping with the previous one, indicating a
-            # multi-allelic locus, and an extra chance to get ALT allele
-            if (v.start < ps):
-                al = self.__dsg__[max(2, int(sq.pop()) + int(al))]
-
             # update the nucleotide pointer
             sq.append(al)
-            ps = v.start + 1
 
         # pad the sequence if necessary
-        if ps < ed:
-            sq.append('0' * (ed - ps))
+        if len(sq) < self.__wnd__:
+            sq.append('0' * (self.__wnd__ - len(sq)))
 
         # join the sequence
         dt = ''.join(sq)

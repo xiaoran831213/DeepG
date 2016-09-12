@@ -1,7 +1,6 @@
 import numpy as np
 import theano
 import theano.tensor as T
-from theano import function as F
 
 
 def FX(fx=None):

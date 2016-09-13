@@ -1,13 +1,10 @@
-import numpy as np
-
-import hlp
-from cat import Cat
-from lyr import Lyr
+from .cat import Cat
+from .pcp import Pcp
 
 
 class AE(Cat):
     """
-    Basic auto-encoder
+    Autoencoder
     """
 
     def __init__(self,
@@ -47,7 +44,7 @@ class AE(Cat):
         encoder.
         """
         """ the encoder view of the autoencoder """
-        ec = Lyr(dim, ec_w, ec_b, ec_s)
+        ec = Pcp(dim, ec_w, ec_b, ec_s)
         """ the decoder view of the autoencoder """
         # dimension of the decoder
         dim = [dim[1], dim[0]]
@@ -59,27 +56,12 @@ class AE(Cat):
         # if the decoding nonlinear is None, the same nonlinear of encoding is
         # used
         dc_s = ec.s if dc_s is None else dc_s
-        dc = Lyr(dim, dc_w, dc_b, dc_s)
+        dc = Pcp(dim, dc_w, dc_b, dc_s)
 
         # the default view is a concatinated network of dimension d0, d1, d0
         super(AE, self).__init__([ec, dc])
         self.ec = ec
         self.dc = dc
-
-
-def test_ae1():
-    import os.path as pt
-
-    hlp.set_seed(120)
-
-    x = np.load(pt.expandvars('$AZ_SP1/lh001F1.npz'))['vtx']['tck']
-    d = x.shape[1]
-    x = hlp.rescale01(x)
-
-    dim = [d / 1, d / 2]
-    m = AE(dim=dim)
-
-    return x, m
 
 
 if __name__ == '__main__':

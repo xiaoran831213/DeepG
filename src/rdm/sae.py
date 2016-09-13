@@ -1,9 +1,5 @@
-import numpy as np
-
-import cat
-import hlp
-from ae import AE
-from cat import Cat
+from .ae import AE
+from .cat import Cat
 
 
 class SAE(Cat):
@@ -21,9 +17,9 @@ class SAE(Cat):
         """ the default view of the stacked autoencoders"""
         sa = AEs
         """ the encoder view of the stacked autoencoders """
-        ec = cat.Cat([a.ec for a in sa])
+        ec = Cat([a.ec for a in sa])
         """ the decoder view of the stacked autoencoders """
-        dc = cat.Cat([a.dc for a in reversed(sa)])
+        dc = Cat([a.dc for a in reversed(sa)])
 
         self.sa = sa  # default view
         self.ec = ec  # encoder view
@@ -59,19 +55,6 @@ class SAE(Cat):
             import copy
             ret = copy.deepcopy(ret)
         return ret
-
-
-def test_sa1():
-    import os.path as pt
-    hlp.set_seed(120)
-
-    x = np.load(pt.expandvars('$AZ_SP1/lh001F1.npz'))['vtx']['tck']
-    d = x.shape[1]
-    x = hlp.rescale01(x)
-
-    dim = [d / 1, d / 2, d / 4, d / 8, d / 16]
-    m = SAE.from_dim(dim)
-    return x, m
 
 
 if __name__ == '__main__':

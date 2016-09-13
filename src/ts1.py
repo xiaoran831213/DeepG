@@ -3,7 +3,9 @@ from rdm import hlp
 from rdm.cat import Cat
 from rdm.pcp import Pcp
 from rdm.trainer import Trainer
+from utl import lpgz
 from rdm.trainer import R1, R2, RN
+from pdb import set_trace
 
 
 def get_data(m=256, f='../raw/wgs/03.vcf.gz'):
@@ -32,9 +34,15 @@ def get_SDA(dm):
 
     # wire them up
     dcs.reverse()
-    stk = Cat(*ecs, *dcs)
+    aes = ecs + dcs
+    stk = Cat(*aes)
 
     return stk
+
+
+def get_SAE(dm):
+    from rdm.sae import SAE
+    return SAE.from_dim(dm)
 
 
 def pre_train1(stk, dat, trainers=None, rep=1, nep=5, reg=R1, lmd=.1):
@@ -97,14 +105,12 @@ def test_one():
 
     d1 = lpgz('../dat/d1.pgz')
     d5 = lpgz('../dat/d5.pgz')
-    
-    ec = Pcp((d1.shape[1], d1.shape[1]*4), tag='E0')
-    dc = Pcp((d1.shape[1]*4, d1.shape[1]), tag='D0')
 
-    n1 = Cat(ec, dc)
-    t1 = Trainer(n1, d1, d1, reg=R1, lmd=.0)
+    from rdm.ae import AE
+    ae = AE([d1.shape[1], d1.shape[1]*4])
 
-    return n1, t1, d1, d5
+    tr = Trainer(ae, d1, d1, reg=R1, lmd=.0)
+    return ae, tr, d1, d5
 
 
 def test_two(dat):
@@ -122,67 +128,3 @@ def test_two(dat):
 
     return nnt, tr1, tr2
 
-
-def roc_one(x, z, plot=0):
-    n_p = (x > 0).sum()         # number of positives
-    n_n = x.size - n_p          # number of negatives
-    t_p = np.ndarray((100,))    # true positives (se)
-    f_p = np.ndarray((100,))    # false positives (1-sp)
-
-    for i, t in enumerate(np.linspace(1, 0, 100)):
-        t_p[i] = ((z > t) & (x > 0)).sum() / n_p
-        f_p[i] = ((z > t) & (x < 1)).sum() / n_n
-
-    if (n_p == 0):
-        t_p[:] = 0
-    if (n_n == 0):
-        f_p[:] = 1
-    
-    # get AUC
-    auc = t_p.mean()
-
-    # plot?
-    if plot:
-        import matplotlib.pyplot as pl
-        pl.plot(f_p, t_p)
-        pl.show()
-    return {'roc': (f_p, t_p), 'auc': auc}
-
-
-def roc_all(x, z, plot=0):
-    n = x.shape[0]
-    rcs = np.ndarray((n, 2, 100), dtype='f4')
-    acs = np.ndarray(n, dtype='f4')
-
-    for i in range(n):
-        r = roc_one(x[i, ], z[i, ])
-        rcs[i, 0, :] = r['roc'][0]
-        rcs[i, 1, :] = r['roc'][1]
-        acs[i] = r['auc']
-
-    return {'roc': rcs, 'auc': acs}
-
-    
-def spgz(fo, s):
-    """ save python object to gziped pickle """
-    import gzip
-    import pickle
-    with gzip.open(fo, 'wb') as gz:
-        pickle.dump(s, gz, -1)
-
-
-def lpgz(fi):
-    """ load python object from gziped pickle """
-    import gzip
-    import pickle
-    with gzip.open(fi, 'rb') as gz:
-        return pickle.load(gz)
-
-
-def hist(x, title='x_histogram'):
-    import matplotlib.pyplot as pl
-    pl.hist(x)
-    pl.title(title)
-    pl.xlabel("x")
-    pl.ylabel("f")
-    pl.show()

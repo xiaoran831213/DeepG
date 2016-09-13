@@ -40,20 +40,19 @@ def L1(y, z):
     return T.mean(bySample)
 
 
-def R2(lsW):
-    """
-    build expression of L2 regulator given a list of weights.
-    """
-    w = T.concatenate([w.flatten() for w in lsW])
-    return T.sqrt(T.sum(w**2))
+def R0(x, thd=1e-06):
+    """ build expression of L0 norm given a vector. """
+    return T.sum((T.abs_(x) > thd), dtype='float32')
 
 
-def R1(lsW):
-    """
-    build expression of L1 regulator given a list of weights.
-    """
-    w = T.concatenate([w.flatten() for w in lsW])
-    return T.sum(T.abs_(w))
+def R1(x):
+    """ build expression of L1 norm given a vector. """
+    return T.sum(T.abs_(x))
+
+
+def R2(x):
+    """ build expression of L2 norm given a vector. """
+    return T.sqrt(T.sum(x**2))
 
 
 def RN(lsW):
@@ -75,6 +74,7 @@ class Trainer(object):
                  mmt=None,
                  lrt=None,
                  lmd=None,
+                 rpt_frq=None,
                  thd=1e-6):
         """
         Constructor.
@@ -103,7 +103,7 @@ class Trainer(object):
         lrt: basic learning rate
         lmb: weight decay factor, the lambda
         """
-        # expression builder of loss
+        # expression builder of error
         err = CE if err is None else err
 
         # expression builder of weight regulator
@@ -113,7 +113,7 @@ class Trainer(object):
         self.eph = S(0, 'eph')
 
         # training batch ppsize
-        bsz = 20 if bsz is None else bsz
+        bsz = 1 if bsz is None else bsz
         self.bsz = S(bsz, 'bsz')
 
         # current batch index
@@ -148,24 +148,28 @@ class Trainer(object):
         y = nnt(x)  # the symbolic batch output
 
         # list of independant symbolic parameters to be tuned
-        parm = parms(y)
-        npar = T.sum([p.size for p in parm])  # parameter count
+        pars = parms(y)  # parameters
+        npar = T.sum([p.size for p in pars])  # count
 
         # list of  symbolic weights to apply decay
-        lswt = [p for p in parm if p.name == 'w']
+        wgts = [p for p in pars if p.name == 'w']  # weights
+        fwgt = [w.flatten() for w in wgts]  # flattened
+        vwgt = T.concatenate(fwgt)  # vectored
+        nwgt = vwgt.size  # count
+        wstd = T.std(vwgt)  # std.
 
         # symbolic batch cost
-        loss = err(y, z)  # loss function
-        wsum = reg(lswt)  # weight sum
-        cost = loss + wsum * self.lmd
+        erro = err(y, z)  # erro function
+        wsum = reg(vwgt)  # weight sum
+        cost = erro + wsum * self.lmd
 
         # symbolic gradient of cost WRT parameters
-        grad = T.grad(cost, parm)
+        grad = T.grad(cost, pars)
         gsum = T.sqrt(T.sum([T.square(g).sum() for g in grad]))
         gavg = gsum / npar  # average over paramter
 
         # 2) define updates after each batch training
-        ZPG = list(zip(parm, grad))
+        ZPG = list(zip(pars, grad))
         up = []
         # update parameters using gradiant decent, and momentum
         for p, g in ZPG:
@@ -197,12 +201,14 @@ class Trainer(object):
         self.step = F([], cost, name="step", givens=bts, updates=up)
 
         # batch error, batch cost
-        self.loss = F([], loss, name="loss", givens=bts)
+        self.erro = F([], erro, name="erro", givens=bts)
         self.wsum = F([], wsum, name="wsum")
+        self.wstd = F([], wstd, name="wstd")
+        self.nwgt = F([], nwgt, name="nwgt")
         self.cost = F([], cost, name="cost", givens=bts)
 
         # total error, total cost
-        self.terr = F([], loss, name="terr", givens=dts)
+        self.terr = F([], erro, name="terr", givens=dts)
         self.tcst = F([], cost, name="tcst", givens=dts)
 
         self.grad = dict([(p, F([], g, givens=bts)) for p, g in ZPG])
@@ -212,53 +218,72 @@ class Trainer(object):
         # * -------- done with trainer functions -------- *
 
         # * -------- historical records -------- *
-        self.__history__ = [self.__report__()]
+        self.__hist__ = [self.__rprt__()]
 
-    def __report__(self):
+    def __rprt__(self):
         """ report current status """
-        rpt = dict(
-            eph=self.eph.get_value().item(),
-            bat=self.bat.get_value().item(),
-            lrt=self.lrt.get_value().item(),
-            lmd=self.lmd.get_value().item(),
-            loss=self.loss().item(),
-            wsum=self.wsum().item(),
-            cost=self.cost().item(),
-            gsum=self.gsum().item())
+        typ = T.sharedvar.TensorSharedVariable
+        shd = [(k, v.get_value().item())
+               for k, v in self.__dict__.items()
+               if type(v) is typ and v.size.eval() == 1]
+
+        import theano
+        typ = theano.compile.function_module.Function
+        rmv = ['step', 'gavg', 'cost', 'erro']
+        tfn = [(k, v().item())
+               for k, v in self.__dict__.items()
+               if type(v) is typ and k not in rmv]
+        
+        rpt = dict(shd + tfn)
         return rpt
 
     def tune(self, nep=1, npt=1):
         """ tune the parameters by running the trainer {nep} epoch.
         nep: number of epoches to go through
-        npt: number of epoches to hold printing
+        npt: frequency of recording
         """
         b0 = self.bat.get_value()  # starting batch
         e0 = self.eph.get_value()  # starting epoch
         eN = e0 + nep  # ending epoch
-        pN = e0 + npt  # printing epoch
+        pN = e0 + npt  # recording epoch
+        ep = self.eph
+        bt = self.bat
 
-        while self.eph.get_value() < eN or self.bat.get_value() < b0:
+        while True:
+            # at the last batch of an epoch, record status
+            if(bt.get_value().item() == b0):
+                # should print?
+                if ep.get_value().item() == pN:
+                    self.cout()
+                    pN += npt  # next printing epoch
+                    
+                # end of training?
+                if ep.get_value().item() == eN:
+                    break
+
+            # send one batch to the training
             self.step()
 
-            # should we print?
-            i = self.eph.get_value().item()  # epoch index
-            j = self.bat.get_value().item()  # batch index
-            if i < pN or j < b0:
-                continue
-            self.cout()
-            pN = i + npt  # update print epoch
+            if self.__hist__[-1]['eph'] < ep.get_value().item():
+                self.__hist__.append(self.__rprt__())
 
     def cout(self):
         # printing format
-        st = '{i:04d}: {c:08.3f} = {e:08.3f} + {l:4.3f} * {r:08.2f}'
-        st += ', {g:07.4f}'
+        st = ('{:05d}: {:08f} = {:08f} + {:06f} * {:03f}'
+              ', {:4f}, {:4f}, {:5f}')
+
+        # latest history
+        h = self.__hist__[-1]
+        
         st = st.format(
-            i=self.eph.get_value().item(),  # epoch
-            c=self.tcst().item(),           # data cost
-            e=self.terr().item(),           # data error
-            l=self.lmd.get_value().item(),  # lambda
-            r=self.wsum().item(),           # sum of weights
-            g=self.gsum().item())           # gradient
+            h['eph'],           # epoch
+            h['tcst'],          # data cost
+            h['terr'],          # data error
+            h['lmd'],           # lambda
+            h['wsum'],          # sum of weights
+            h['wstd'],          # std of weights
+            h['gsum'],          # sum of gradient
+            h['lrt'])           # learning rate
         print(st)
 
 

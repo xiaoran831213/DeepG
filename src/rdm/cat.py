@@ -5,7 +5,7 @@ class Cat(Nnt):
     """
     Neural networks formed by concatinating sub-networks.
     """
-    def __init__(self, *nts):
+    def __init__(self, nts):
         """
         Initialize the super neural network by a list of sub networks.
 

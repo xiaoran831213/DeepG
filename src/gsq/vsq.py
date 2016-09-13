@@ -51,24 +51,28 @@ class DsgVsq:
     def __next__(self):
         d = np.zeros((len(self.__vgz__.samples), self.__wnd__), '<i1')
         i = 0
-        while(i < self.__wnd__):
+        while (i < self.__wnd__):
             # get next variant
             try:
                 v = next(self.__vgz__)
             except StopIteration as e:
                 raise e
-            
+
             # get dosage values
-            v = [int(g.gt_alleles[0] > '0') +
-                 int(g.gt_alleles[1] > '0') for g in v.samples]
+            v = [int(g.gt_alleles[0] > '0') + int(g.gt_alleles[1] > '0')
+                 for g in v.samples]
             d[:, i] = np.array(v, '<i1')
-            i = i+1
+            i = i + 1
 
         # the coding of allele counts
         d = np.array([int(c) for c in self.__dsg__], '<i1')[d]
-        
+
         return d
-                   
+
+    # compatible with Python 2.x
+    def next(self):
+        return self.__next__()
+
 
 class RndVsq:
     """
@@ -76,8 +80,7 @@ class RndVsq:
     non-variants in between.
     """
 
-    def __init__(
-            self, vgz, chm=None, bp0=None, bp1=None, wnd=1024, dsg='012'):
+    def __init__(self, vgz, chm=None, bp0=None, bp1=None, wnd=1024, dsg='012'):
         """
         vgz: name of the bgzipped VCF file (*.vcf.gz), if None,
         only the reference genome will be returned.
@@ -161,9 +164,13 @@ class RndVsq:
         dt = ''.join(sq)
         return dt
 
+    # compatible with Python 2.x
+    def next(self):
+        return self.__next__()
+
 
 def test1():
     v = '../raw/ann/03.vcf.gz'
-    r = DsgSeq(v, chm=3 - 1, bp0=16050072)
+    r = DsgVsq(v, chm=3 - 1, bp0=16050072)
     # r = VcfSeq(vgz, fsq, chm=22 - 1, bp0=16050650)
     return r

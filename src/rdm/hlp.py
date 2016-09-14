@@ -29,11 +29,11 @@ def set_seed(seed):
 set_seed(None)
 
 
-def S(v, name=None, strict=False):
+def S(v, name=None, dtype=None, strict=False):
     """ create shared variable from v """
     # wrap python type to numpy type
     if not isinstance(v, np.ndarray):
-        v = np.array(v)
+        v = np.array(v, dtype)
 
     # wrap numeric type to default theano configuration
     if v.dtype == np.dtype('f8') and FX() is 'float32':

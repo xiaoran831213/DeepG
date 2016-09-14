@@ -66,8 +66,8 @@ class Trainer(object):
 
     def __init__(self,
                  nnt,
-                 src=None,
-                 dst=None,
+                 x=None,
+                 z=None,
                  err=None,
                  reg=None,
                  bsz=None,
@@ -82,11 +82,11 @@ class Trainer(object):
         nnt: an expression builder for the neural network to be trained,
         could be a Nnt object.
 
-        src: the inputs, with the first dimension standing for sample units.
+        x: the inputs, with the first dimension standing for sample units.
         If unspecified, the trainer will try to evaluate the entry point and
         cache the result as source data.
         
-        dst: the labels, with the first dimension standing for sample units.
+        z: the labels, with the first dimension standing for sample units.
         if unspecified, a simi-unsupervied training is assumed as the labels
         will be identical to the inputs.
 
@@ -110,14 +110,14 @@ class Trainer(object):
         reg = RN if reg is None else reg
 
         # current epoch index
-        self.eph = S(0, 'eph')
+        self.ep = S(0, 'ep')
 
         # training batch ppsize
         bsz = 1 if bsz is None else bsz
-        self.bsz = S(bsz, 'bsz')
+        self.bsz = S(bsz, 'bsz', dtype='u4')
 
         # current batch index
-        self.bat = S(0, 'bat')
+        self.bt = S(0, 'bt')
 
         # momentumn, make sure momentum is a sane value
         mmt = 0.0 if mmt is None else mmt
@@ -134,12 +134,15 @@ class Trainer(object):
 
         # grand source and expect
         self.dim = (nnt.dim[0], nnt.dim[-1])
-        src = np.zeros(
-            (self.bsz.get_value(), self.dim[0])) if src is None else src
-        dst = np.zeros(
-            (self.bsz.get_value(), self.dim[1])) if dst is None else dst
-        self.src = S(src, 'src')
-        self.dst = S(dst, 'dst')
+        x = np.zeros(bsz, self.dim[0]) if x is None else x
+        z = np.zeros(bsz, self.dim[1]) if z is None else z
+        self.x = S(x, 'x')
+        self.z = S(z, 'z')
+
+        # -------- helper expressions -------- *
+        nsbj = T.cast(self.x.shape[0], 'int32')
+        bfrc = T.cast(nsbj % self.bsz, 'int32')
+        nbat = nsbj + self.bsz + T.cast(bfrc > 0, 'int32')
 
         # -------- construct trainer function -------- *
         # 1) symbolic expressions
@@ -153,8 +156,7 @@ class Trainer(object):
 
         # list of  symbolic weights to apply decay
         wgts = [p for p in pars if p.name == 'w']  # weights
-        fwgt = [w.flatten() for w in wgts]  # flattened
-        vwgt = T.concatenate(fwgt)  # vectored
+        vwgt = T.concatenate([w.flatten() for w in wgts])  # vecter
         nwgt = vwgt.size  # count
         wstd = T.std(vwgt)  # std.
 
@@ -185,32 +187,38 @@ class Trainer(object):
             up.append((p, p - self.lrt * h))
 
         # update batch and eqoch index
-        uBat = (((self.bat + 1) * self.bsz) % self.src.shape[0]) // self.bsz
-        uEph = self.eph + ((self.bat + 1) * self.bsz) // self.src.shape[0]
-        up.append((self.bat, uBat))
-        up.append((self.eph, uEph))
+        uBat = (((self.bt + 1) * self.bsz) % self.x.shape[0]) // self.bsz
+        uEph = self.ep + ((self.bt + 1) * self.bsz) // self.x.shape[0]
+        up.append((self.bt, uBat))
+        up.append((self.ep, uEph))
 
         # 3) the trainer functions
         # feed symbols with explicit data in batches
-        bts = {x: self.src[self.bat * self.bsz:(self.bat + 1) * self.bsz],
-               z: self.dst[self.bat * self.bsz:(self.bat + 1) * self.bsz]}
-        dts = {x: self.src, z: self.dst}
+        bts = {x: self.x[self.bt * self.bsz:(self.bt + 1) * self.bsz],
+               z: self.z[self.bt * self.bsz:(self.bt + 1) * self.bsz]}
+        dts = {x: self.x, z: self.z}
 
         # each invocation sends one batch of training examples to the network,
         # calculate total cost and tune the parameters by gradient decent.
         self.step = F([], cost, name="step", givens=bts, updates=up)
 
+        # help functions
+        self.nbat = F([], nbat, name="nbat")
+        self.bfrc = F([], bfrc, name="bfrc")
+        self.nsbj = F([], nsbj, name="nsbj")
+        
         # batch error, batch cost
-        self.erro = F([], erro, name="erro", givens=bts)
-        self.wsum = F([], wsum, name="wsum")
-        self.wstd = F([], wstd, name="wstd")
-        self.nwgt = F([], nwgt, name="nwgt")
-        self.cost = F([], cost, name="cost", givens=bts)
+        self.berr = F([], erro, name="berr", givens=bts)
+        self.bcst = F([], cost, name="cost", givens=bts)
 
-        # total error, total cost
+        # training error, training cost
         self.terr = F([], erro, name="terr", givens=dts)
         self.tcst = F([], cost, name="tcst", givens=dts)
 
+        # weights, and parameters
+        self.wsum = F([], wsum, name="wsum")
+        self.wstd = F([], wstd, name="wstd")
+        self.nwgt = F([], nwgt, name="nwgt")
         self.grad = dict([(p, F([], g, givens=bts)) for p, g in ZPG])
         self.npar = F([], npar, name="npar")
         self.gsum = F([], gsum, name="gsum", givens=bts)
@@ -218,73 +226,82 @@ class Trainer(object):
         # * -------- done with trainer functions -------- *
 
         # * -------- historical records -------- *
-        self.__hist__ = [self.__rprt__()]
+        self.__hist__ = [self.__rpt__()]
 
-    def __rprt__(self):
+    def __rpt__(self):
         """ report current status """
         typ = T.sharedvar.TensorSharedVariable
-        shd = [(k, v.get_value().item())
-               for k, v in self.__dict__.items()
+        shd = [(k, v.get_value().item()) for k, v in self.__dict__.items()
                if type(v) is typ and v.size.eval() == 1]
 
         import theano
         typ = theano.compile.function_module.Function
-        rmv = ['step', 'gavg', 'cost', 'erro']
-        tfn = [(k, v().item())
-               for k, v in self.__dict__.items()
+        rmv = ['step', 'gavg']
+        tfn = [(k, v().item()) for k, v in self.__dict__.items()
                if type(v) is typ and k not in rmv]
-        
+
         rpt = dict(shd + tfn)
         return rpt
 
-    def tune(self, nep=1, npt=1):
+    def tune(self, nep=1, nbt=0, rec=0, prt=0):
         """ tune the parameters by running the trainer {nep} epoch.
         nep: number of epoches to go through
         npt: frequency of recording
         """
-        b0 = self.bat.get_value()  # starting batch
-        e0 = self.eph.get_value()  # starting epoch
-        eN = e0 + nep  # ending epoch
-        pN = e0 + npt  # recording epoch
-        ep = self.eph
-        bt = self.bat
+        bt = self.bt
+        b0 = bt.eval().item()  # starting batch
+        ei, bi = 0, 0  # counted epochs and batches
 
-        while True:
-            # at the last batch of an epoch, record status
-            if(bt.get_value().item() == b0):
-                # should print?
-                if ep.get_value().item() == pN:
-                    self.cout()
-                    pN += npt  # next printing epoch
-                    
-                # end of training?
-                if ep.get_value().item() == eN:
-                    break
+        ns = self.src.shape[0].eval(dtype='f4')
+        bz = self.bsz.eval(dtype='f4')
+        nbt = min(nbt, ns // bz)
 
-            # send one batch to the training
+        while ei < nep or bi < nbt:
+            # send one batch for training
             self.step()
+            bi = bi + 1  # batch count increase by 1
 
-            if self.__hist__[-1]['eph'] < ep.get_value().item():
-                self.__hist__.append(self.__rprt__())
+            if rec > 0:  # record each batch
+                self.__hist__.append(self.__rpt__())
+            if prt > 0:  # print each batch
+                self.cout()
 
-    def cout(self):
+            # see the next epoch relative to batch b0?
+            if bt.eval().item() == b0:
+                ei = ei + 1  # epoch count increase by 1
+                bi = 0  # reset batch count
+
+            # see the next epoch relative to batch 0?
+            if bt.eval().item() == 0:
+                if rec == 0:  # record at new epoch
+                    self.__hist__.append(self.__rpt__())
+                if prt == 0:  # print
+                    self.cout()
+
+    def cout(self, ix=None):
+        """
+        Print out a range of training records.
+
+        idx: slice of records to be printed, by default the last
+        one is shown.
+        """
+        hs = self.__hist__
+
+        if ix is None:
+            hs = [self.__hist__[-1]]
+        elif ix is int:
+            hs = [self.__hist__[ix]]
+        else:
+            hs = hs[ix]
+
         # printing format
-        st = ('{:05d}: {:08f} = {:08f} + {:06f} * {:03f}'
-              ', {:4f}, {:4f}, {:5f}')
+        st = ('{ep:04d}.{bt:04d}: '
+              '{tcst:9.4f} = {terr:9.4f} + {lmd:8.6f} * {wsum:7.1f}, '
+              '{wstd:4f}, {gsum:4f}, {lrt:5f}')
 
         # latest history
-        h = self.__hist__[-1]
-        
-        st = st.format(
-            h['eph'],           # epoch
-            h['tcst'],          # data cost
-            h['terr'],          # data error
-            h['lmd'],           # lambda
-            h['wsum'],          # sum of weights
-            h['wstd'],          # std of weights
-            h['gsum'],          # sum of gradient
-            h['lrt'])           # learning rate
-        print(st)
+        for h in hs:
+            print(st.format(**h))
 
 
 def test_trainer():

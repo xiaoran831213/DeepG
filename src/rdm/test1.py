@@ -38,7 +38,7 @@ def pre_train(data, das, nep = 600):
     x = data
     for ec, dc in das:
         dc.x(ec.y)
-        tr = Trainer(ec.x, dc.y, src = x, dst = x, lrt = 0.005)
+        tr = Trainer(ec.x, dc.y, x = x, z = x, lrt = 0.005)
         tr.tune(nep, npt = 10)
         ec.x(x)
         x = ec.y().eval()
@@ -53,7 +53,7 @@ def fine_tune(data, das, nep = 600):
     for i, j in zip(sda[:-1], sda[1:]):
         j.x(i.y) # lower output -> higher input
 
-    tr = Trainer(sda[0].x, sda[-1].y, src = data, dst = data, lrt = 0.0005)
+    tr = Trainer(sda[0].x, sda[-1].y, x = data, z = data, lrt = 0.0005)
     tr.tune(nep, npt= 10)
     return tr
     

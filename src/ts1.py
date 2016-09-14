@@ -107,13 +107,28 @@ def test_one():
     d5 = lpgz('../dat/d5.pgz')
 
     from rdm.ae import AE
-    ae = AE([d1.shape[1], d1.shape[1]*4])
+    a1 = AE([d1.shape[1], d1.shape[1]*2])
+    t1 = Trainer(a1, d1, d1, reg=R1, lmd=.0, lrt=0.001, bsz=1)
 
-    tr = Trainer(ae, d1, d1, reg=R1, lmd=.0)
-    return ae, tr, d1, d5
+    from copy import deepcopy
+    a2 = deepcopy(a1)
+    t2 = Trainer(a2, d1, d1, reg=R1, lmd=.0, lrt=0.001, bsz=d1.shape[0])
+
+    # from time import time as tm
+    # time0 = tm()
+    # t1.tune(50)
+    # time1 = tm()
+    # print(time1 - time0)
+    
+    # time0 = tm()
+    # t2.tune(50)
+    # time1 = tm()
+    # print(time1 - time0)
+
+    return a1, t1, a2, t2, d1, d5
 
 
-def test_two(dat):
+def test_superfit(dat):
     hlp.set_seed(None)
 
     nnt = get_SDA([256, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1])

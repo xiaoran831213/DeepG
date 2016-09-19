@@ -5,7 +5,7 @@ from .hlp import T
 from .nnt import Nnt
 
 
-class PcpOdr(Nnt):
+class PcpOd2(Nnt):
     """
     A Perceptron, which is the full linear recombination of the input
     elements and a bias(or intercept), followed by an per-element non-
@@ -79,7 +79,7 @@ class PcpOdr(Nnt):
         input elements and an bias(or intercept), followed by an
         element-wise non-linear transformation(usually sigmoid)
         """
-        affin = T.sum(T.dot(x, self.w) + self.b, 0)
+        affin = T.dot(x, self.w) + self.b
         if self.s is 1:
             return affin
         else:

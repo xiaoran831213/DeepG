@@ -142,7 +142,7 @@ class Trainer(object):
         # -------- helper expressions -------- *
         nsbj = T.cast(self.x.shape[0], 'int32')
         bfrc = T.cast(nsbj % self.bsz, 'int32')
-        nbat = nsbj + self.bsz + T.cast(bfrc > 0, 'int32')
+        nbat = nsbj // self.bsz + T.cast(bfrc > 0, 'int32')
 
         # -------- construct trainer function -------- *
         # 1) symbolic expressions
@@ -252,9 +252,8 @@ class Trainer(object):
         b0 = bt.eval().item()  # starting batch
         ei, bi = 0, 0  # counted epochs and batches
 
-        ns = self.src.shape[0].eval(dtype='f4')
-        bz = self.bsz.eval(dtype='f4')
-        nbt = min(nbt, ns // bz)
+        nep = nep + nbt // self.nbat().item()
+        nbt = nbt % self.bsz.eval().item()
 
         while ei < nep or bi < nbt:
             # send one batch for training

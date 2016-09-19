@@ -2,7 +2,6 @@ import numpy as np
 from rdm import hlp
 from rdm.cat import Cat
 from rdm.pcp import Pcp
-from rdm.pcp_odr import PcpOdr
 from rdm.trainer import Trainer
 from utl import lpgz, spgz
 from rdm.trainer import R1, R2, CE, L1, L2
@@ -127,42 +126,10 @@ def data_two():
     return d2, d6
 
 
-def test_one():
-    """ adaptive training for one autoendocer. """
-    hlp.set_seed(None)
-
-    d1 = lpgz('../dat/d1.pgz')
-    d5 = lpgz('../dat/d5.pgz')
-
-    from rdm.ae import AE
-    a1 = AE([d1.shape[1], d1.shape[1] * 2])
-    t1 = Trainer(a1, d1, d1, err=CE, reg=R1, lmd=.0, lrt=0.001, bsz=1)
-
-    from copy import deepcopy
-    # a2 = deepcopy(a1)
-    # t2 = Trainer(a2, d1, d1, reg=R1, lmd=.0, lrt=0.001, bsz=d1.shape[0])
-
-    a2 = deepcopy(a1)
-    t2 = Trainer(a2, d1, d1, err=L2, reg=R1, lmd=.0, lrt=0.001, bsz=1)
-
-    # from time import time as tm
-    # time0 = tm()
-    # t1.tune(50)
-    # time1 = tm()
-    # print(time1 - time0)
-
-    # time0 = tm()
-    # t2.tune(50)
-    # time1 = tm()
-    # print(time1 - time0)
-
-    return a1, t1, a2, t2, d1, d5
-
-
 def lvl_out(x, lvl=2, a=20):
     from theano import tensor as T
     l = lvl - 1
-    t = x - T.arange(0, l, dtype='float32').reshape((l, 1))
+    t = x - T.arange(0, l, dtype='float32').reshape((l, 1, 1))
     i = T.nnet.sigmoid(a * t)
     y = T.sum(i, 0) / l
     return y
@@ -173,41 +140,27 @@ def flvl(lvl=2, a=20):
     return f
 
 
-def test_two():
+def tst4():
     """ adaptive training for one autoendocer. """
     hlp.set_seed(None)
 
-    d2 = lpgz('../dat/d2.pgz')  # {0, .5, 1}
-    d6 = lpgz('../dat/d6.pgz')  # {0, .5, 1}
+    d1 = lpgz('../dat/d1.pgz')  # {0, .5, 1}
+    d5 = lpgz('../dat/d5.pgz')  # {0, .5, 1}
 
-    dm = d2.shape[1] * np.power(2.0, [0, 1, 0, -1, -2, -3, -4])
+    dm = d1.shape[1] * np.power(2.0, [0, 1, 0, -1])
     dm = np.array(dm, 'i4')
 
     from rdm.sae import SAE
-    a2 = SAE.from_dim(dm)
-    a2[-1].s=flvl(3, 5)
-    t2 = Trainer(a2, d2, d2, err=CE, reg=R1, lmd=.0, lrt=0.005, bsz=10)
-    # L2(a2(d2), d2).eval(); CE(a2(d6), d6).eval(); L2(a2(d6), d6).eval()
+    a1 = SAE.from_dim(dm)
+    t1 = Trainer(a1, d1, d1, err=CE, reg=R1, lmd=.0, lrt=0.005, bsz=10)
 
     from copy import deepcopy
-    a3 = deepcopy(a2)
-    t3 = Trainer(a3, d2, d2, err=L2, reg=R1, lmd=.0, lrt=0.005, bsz=10)
-    # CE(a3(d2), d2).eval(); L2(a3(d6), d6).eval(); CE(a3(d6), d6).eval()
+    a2 = deepcopy(a1)
+    a2[-1].s = flvl(3, 2.0)
+    t2 = Trainer(a2, d1, d1, err=CE, reg=R1, lmd=.0, lrt=0.005, bsz=10)
 
-    return a2, t2, a3, t3, d2, d6
+    a3 = deepcopy(a1)
+    a3[-1].s = flvl(2, 2.0)
+    t3 = Trainer(a3, d1, d1, err=CE, reg=R1, lmd=.0, lrt=0.005, bsz=10)
 
-
-def test_superfit(dat):
-    hlp.set_seed(None)
-
-    nnt = get_SDA([256, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1])
-
-    print('pre-train:')
-    tr1 = None
-    nnt, tr1 = pre_train1(nnt, dat, tr1, 20, 30, reg=R1, lmd=.0)
-
-    print('fine tune:')
-    tr2 = None
-    nnt, tr2 = fine_tune1(nnt, dat, tr2, 300, reg=R1, lmd=.0)
-
-    return nnt, tr1, tr2
+    return a1, t1, a2, t2, a3, t3, d1, d5

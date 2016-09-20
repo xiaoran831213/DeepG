@@ -86,20 +86,35 @@ class PcpOdr(Nnt):
         q: dimension of output per observation
         k: number of ordinal levels
 
-        logit(p(y<=j)) = b[j] + sum(x[i,] * w[,i]),
+        logit[p(y <= j)] = b[j] + sum(x[i,] * w[,i]),
         0 <= i < n, 0 <= j < k-1
         --> p(y <=   j) = sigmoid{b[j] + sum(x[i,] * w[,i])}
         --> and p(y <= k-1) = 1
         """
-        c = self.s(x.dot(self.w) + self.b)
-        return self.__prob__(c)
+        # i = T.alloc(1, *x.shape)
+        c = T.dot(x, self.w) + self.b
+        return c
 
     def __prob__(self, c):
         """ build symbolic expression for the k probabilities of each
         level, given the k-1 cumulative probability.
         """
-        return p
+        return c
         
 
 if __name__ == '__main__':
     pass
+
+
+def test_pcp_odr():
+    """ """
+    x = np.random.uniform(0, 1, 1750*256).reshape(1750, 256)
+    d = x.shape
+    w = np.random.uniform(
+        low=-4 * np.sqrt(6. / (d[0] + d[1])),
+        high=4 * np.sqrt(6. / (d[0] + d[1])),
+        size=(256, 512))
+    b = np.repeat([-1, 1], 512).reshape(2, 1, 512)
+
+    return x, w, b
+    

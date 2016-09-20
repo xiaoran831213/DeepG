@@ -164,3 +164,13 @@ def tst4():
     t2 = Trainer(a2, d1, d1, err=CE, reg=R1, lmd=.0, lrt=0.005, bsz=10)
 
     return a1, t1, a2, t2, d1, d5
+
+
+def ts5():
+    o = Odr((512, 256), 3)
+    x = np.random.uniform(0, 1, 1750 * 512).reshape(1750, 512)
+    w = o.w.eval()
+    b = o.b.eval()
+    i = x.dot(w) + b
+    p = o.s(i).eval()
+    return o, x, w, b, i, p

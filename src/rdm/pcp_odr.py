@@ -58,7 +58,7 @@ class PcpOdr(Nnt):
             w = S(w, 'w')
 
         if b is None:
-            b = np.zeros((lvl-1, dim[1]), dtype='float32')
+            b = np.zeros((lvl-1, 1, dim[1]), dtype='float32')
             b = S(b, 'b')
 
         self.w = w
@@ -74,28 +74,32 @@ class PcpOdr(Nnt):
             str(self.s)[0].upper(), self.dim[0], self.dim[1])
 
     def __expr__(self, x):
-        """ build symbolic expression of {y} given {x}.
-        For a perceptron, it is the full linear recombination of the
-        input elements and an bias(or intercept), followed by an
-        element-wise non-linear transformation(usually sigmoid)
+        """ build symbolic expression of k probabilities p[0], p[1], ...,
+        p[k-1]} for the output levels, given p dimensional input {x} and
+        q dimensional output, which is done for all {n} observations.
+
+        1) let x.dim = (n, p), w.dim = (p, q), and b.dim = (k, 1, q)
+        let a = x.dot(self.w) + self.b, and a.dim = (k, n, q)
+        
+        n: number of observations
+        p: dimension of input per observation
+        q: dimension of output per observation
+        k: number of ordinal levels
+
+        logit(p(y<=j)) = b[j] + sum(x[i,] * w[,i]),
+        0 <= i < n, 0 <= j < k-1
+        --> p(y <=   j) = sigmoid{b[j] + sum(x[i,] * w[,i])}
+        --> and p(y <= k-1) = 1
         """
-        affin = T.sum(T.dot(x, self.w) + self.b, 0)
-        if self.s is 1:
-            return affin
-        else:
-            return self.s(affin)
+        c = self.s(x.dot(self.w) + self.b)
+        return self.__prob__(c)
 
-
-def test_lyr():
-    from os import path as pt
-    hlp.set_seed(120)
-    x = np.load(pt.expandvars('$AZ_SP1/lh001F1.npz'))['vtx']['tck']
-    d = (x.shape[1], x.shape[1] / 2)
-    x = hlp.rescale01(x)
-
-    nt = Pcp(dim=d)
-    return x, nt
-
+    def __prob__(self, c):
+        """ build symbolic expression for the k probabilities of each
+        level, given the k-1 cumulative probability.
+        """
+        return p
+        
 
 if __name__ == '__main__':
     pass

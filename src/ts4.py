@@ -2,6 +2,7 @@ import numpy as np
 from rdm import hlp
 from rdm.cat import Cat
 from rdm.pcp import Pcp
+from rdm.pcp_odr import PcpOdr as Odr
 from rdm.trainer import Trainer
 from utl import lpgz, spgz
 from rdm.trainer import R1, R2, CE, L1, L2
@@ -156,11 +157,10 @@ def tst4():
 
     from copy import deepcopy
     a2 = deepcopy(a1)
-    a2[-1].s = flvl(3, 2.0)
+    # a2[-1].s = flvl(2, 2.0)
+    b1 = hlp.S(a2[-1].b.eval())
+    b2 = hlp.S(a2[-1].b.eval())
+    a2[-1].b = b1 + b2
     t2 = Trainer(a2, d1, d1, err=CE, reg=R1, lmd=.0, lrt=0.005, bsz=10)
 
-    a3 = deepcopy(a1)
-    a3[-1].s = flvl(2, 2.0)
-    t3 = Trainer(a3, d1, d1, err=CE, reg=R1, lmd=.0, lrt=0.005, bsz=10)
-
-    return a1, t1, a2, t2, a3, t3, d1, d5
+    return a1, t1, a2, t2, d1, d5

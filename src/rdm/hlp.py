@@ -12,7 +12,6 @@ def FX(fx=None):
 # by default use 32bit float
 FX('float32')
 
-
 # * -------- random number helpers -------- * #
 rs_np = None  # numpy random stream
 rs_tn = None  # theano random stream
@@ -25,6 +24,7 @@ def set_seed(seed):
     rs_tn = theano.tensor.shared_randomstreams.RandomStreams(
         rs_np.randint(2**30))
     __seed__ = seed
+
 
 set_seed(None)
 
@@ -45,7 +45,10 @@ def S(v, name=None, dtype=None, strict=False):
     # if v.dtype is np.dtype('u8') and FX() is 'float32':
     #     v = np.asarray(v, dtype = 'u4')
 
-    return theano.shared(v, name=name, strict=strict)
+    # broadcasting pattern
+    b = tuple(s == 1 for s in v.shape)
+
+    return theano.shared(v, name=name, strict=strict, broadcastable=b)
 
 
 def shared_acc(shared_var, doc=None):

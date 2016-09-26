@@ -13,7 +13,8 @@ class PcpOdr(Nnt):
     The ordinal percepptron takes input of discrate level (e.g. poor,
     fair, normal, fine, exceptional).
     """
-    def __init__(self, dim, lvl, w=None, b=None, s=None, tag=None, **kwd):
+
+    def __init__(self, dim, lvl, mod=1, w=None, b=None, s=None, **kwd):
         """
         Initialize the perceptron by specifying the the dimension of input
         and output.
@@ -27,6 +28,9 @@ class PcpOdr(Nnt):
         dim = (p, q)
 
         lvl: the number of levels of input
+        mod: mode of transformation:
+        0 --> from observed levels to hidden units.
+        1 --> from hidden units to predicted probabilities of levels.
 
         w: (optional) weight matrix (p, q), randomly filled by default.
         b: (optional) bias matrix (p, k), zero filled by default.
@@ -35,10 +39,19 @@ class PcpOdr(Nnt):
         By default the sigmoid function is used.
         To suppress nonlinearity, specify 1 instead.
         """
-        super(PcpOdr, self).__init__(tag, **kwd)
+        super(PcpOdr, self).__init__(**kwd)
 
         # I/O dimensions
         self.dim = dim
+
+        # output levels
+        self.lvl = lvl
+
+        # transformation mode
+        self.mod = mod
+
+        # transformation direction
+        self.dir = dir
 
         # note : W' was written as `W_prime` and b' as `b_prime`
         """
@@ -58,8 +71,12 @@ class PcpOdr(Nnt):
             w = S(w, 'w')
 
         if b is None:
-            b = np.zeros((lvl-1, 1, dim[1]), dtype='float32')
-            b = S(b, 'b')
+            if mod is 1:
+                b = np.linspace(0, 1, lvl, dtype='float32')[0:lvl - 1]
+                b = b.repeat(dim[-1]).reshape(lvl - 1, 1, dim[-1])
+            else:
+                b = np.zeros((1, 1, dim[-1]), dtype='float32')
+        b = S(b, 'b')
 
         self.w = w
         self.b = b
@@ -67,6 +84,7 @@ class PcpOdr(Nnt):
         if s is None:
             s = T.nnet.sigmoid
         self.s = s
+
 
     # a Pcp cab be represented by the nonlinear funciton and I/O dimensions
     def __repr__(self):
@@ -78,43 +96,57 @@ class PcpOdr(Nnt):
         p[k-1]} for the output levels, given p dimensional input {x} and
         q dimensional output, which is done for all {n} observations.
 
-        1) let x.dim = (n, p), w.dim = (p, q), and b.dim = (k, 1, q)
-        let a = x.dot(self.w) + self.b, and a.dim = (k, n, q)
-        
+        1) x.dim = (n, p), w.dim = (p, q), and b.dim = (k, 1, q)
         n: number of observations
-        p: dimension of input per observation
-        q: dimension of output per observation
-        k: number of ordinal levels
+        p: dimension of input
+        q: dimension of output
+        r: number of levels of the output
+        s: a link function to transform a real number into a propability.
 
-        logit[p(y <= j)] = b[j] + sum(x[i,] * w[,i]),
-        0 <= i < n, 0 <= j < k-1
-        --> p(y <=   j) = sigmoid{b[j] + sum(x[i,] * w[,i])}
-        --> and p(y <= k-1) = 1
+        p(y[i,j] <= l) = s{b[l, *, j] + sum(x[i,k] * w[k,j], k = 0, .. p-1)}
+        p(y <= k) = 1,
+        where i = 0 .. n indexes observations, j = 0 .. p-1 indexes input
+        features x[j], k = 0 .. q indexes output feature y[k], and l = 0 ...
+        r-1 indexes the output levels.
         """
-        # i = T.alloc(1, *x.shape)
-        c = T.dot(x, self.w) + self.b
-        return c
+        if self.mod is 1:
+            c = self.s(T.dot(x, self.w) + self.b)
+            return T.concatenate(
+                [c[0:1], c[1:] - c[0:-1], 1 - c[-1:]], T.zeros_like(c[0:1]))
+        else:
+            # a = T.concatenate([self.b, T.zeros_like(self.b[0:1])])
+            i = T.dot(x, self.w) + self.b
+            return self.s(i.sum(0))
 
-    def __prob__(self, c):
-        """ build symbolic expression for the k probabilities of each
-        level, given the k-1 cumulative probability.
+    def CE(y, z):
+        """ build symbolic expression of multinomial cross entrophy given the
+        expected outcome {z}, and the predicted probabilities {y}.
+        In reality, the mean negative log likelihood across observation is
+        to be returned.
+        y.dim = (..., k, n, q) = z.dim
         """
-        return c
-        
+        return -(z * T.log(y)).sum((0, -1)).mean()
+
+    def C1(y, z, lvl):
+        """ build symbolic expression of binary cross entrophy. """
+        v = np.linspace(0, 1, lvl).reshape(lvl, 1, 1)
+        y = (y * v).sum(0)
+        z = (z * v).sum(0)
+        # return y, z
+        return -(z * T.log(y) + (1 - z) * T.log(1 - y)).sum(-1).mean()
+
 
 if __name__ == '__main__':
     pass
 
 
-def test_pcp_odr():
+def test_pdr():
     """ """
-    x = np.random.uniform(0, 1, 1750*256).reshape(1750, 256)
+    x = np.random.uniform(0, 1, 1750 * 256).reshape(1750, 256)
     d = x.shape
     w = np.random.uniform(
         low=-4 * np.sqrt(6. / (d[0] + d[1])),
         high=4 * np.sqrt(6. / (d[0] + d[1])),
         size=(256, 512))
     b = np.repeat([-1, 1], 512).reshape(2, 1, 512)
-
     return x, w, b
-    

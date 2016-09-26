@@ -31,6 +31,8 @@ set_seed(None)
 
 def S(v, name=None, dtype=None, strict=False):
     """ create shared variable from v """
+    if type(v) is T.sharedvar.TensorSharedVariable:
+        return v
     # wrap python type to numpy type
     if not isinstance(v, np.ndarray):
         v = np.array(v, dtype)

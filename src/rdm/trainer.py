@@ -134,10 +134,10 @@ class Trainer(object):
 
         # grand source and expect
         self.dim = (nnt.dim[0], nnt.dim[-1])
-        x = np.zeros(bsz, self.dim[0]) if x is None else x
-        z = np.zeros(bsz, self.dim[1]) if z is None else z
-        self.x = S(x, 'x')
-        self.z = S(z, 'z')
+        x = S(np.zeros(bsz, self.dim[0]) if x is None else x)
+        z = S(np.zeros(bsz, self.dim[1]) if z is None else z)
+        self.x = x
+        self.z = z
 
         # -------- helper expressions -------- *
         nsbj = T.cast(self.x.shape[0], 'int32')
@@ -146,8 +146,10 @@ class Trainer(object):
 
         # -------- construct trainer function -------- *
         # 1) symbolic expressions
-        x = T.matrix('x')  # the symbolic batch source
-        z = T.matrix('z')  # the symbolic batch expect
+        x = T.tensor(
+            name='x', dtype=x.dtype, broadcastable=x.broadcastable)
+        z = T.tensor(
+            name='z', dtype=z.dtype, broadcastable=z.broadcastable)
         y = nnt(x)  # the symbolic batch output
 
         # list of independant symbolic parameters to be tuned
@@ -187,15 +189,18 @@ class Trainer(object):
             up.append((p, p - self.lrt * h))
 
         # update batch and eqoch index
-        uBat = (((self.bt + 1) * self.bsz) % self.x.shape[0]) // self.bsz
-        uEph = self.ep + ((self.bt + 1) * self.bsz) // self.x.shape[0]
+        uBat = (((self.bt + 1) * self.bsz) % self.x.shape[-2]) // self.bsz
+        uEph = self.ep + ((self.bt + 1) * self.bsz) // self.x.shape[-2]
         up.append((self.bt, uBat))
         up.append((self.ep, uEph))
 
         # 3) the trainer functions
         # feed symbols with explicit data in batches
-        bts = {x: self.x[self.bt * self.bsz:(self.bt + 1) * self.bsz],
-               z: self.z[self.bt * self.bsz:(self.bt + 1) * self.bsz]}
+        # bts = {x: self.x[self.bt * self.bsz:(self.bt + 1) * self.bsz],
+        #        z: self.z[self.bt * self.bsz:(self.bt + 1) * self.bsz]}
+        bts = T.arange((self.bt + 0) * self.bsz, (self.bt + 1) * self.bsz)
+        bts = {x: self.x.take(bts, -2, 'wrap'),
+               z: self.z.take(bts, -2, 'wrap')}
         dts = {x: self.x, z: self.z}
 
         # each invocation sends one batch of training examples to the network,
@@ -206,7 +211,7 @@ class Trainer(object):
         self.nbat = F([], nbat, name="nbat")
         self.bfrc = F([], bfrc, name="bfrc")
         self.nsbj = F([], nsbj, name="nsbj")
-        
+
         # batch error, batch cost
         self.berr = F([], erro, name="berr", givens=bts)
         self.bcst = F([], cost, name="cost", givens=bts)

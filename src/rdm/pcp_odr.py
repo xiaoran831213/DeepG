@@ -14,7 +14,7 @@ class PcpOdr(Nnt):
     fair, normal, fine, exceptional).
     """
 
-    def __init__(self, dim, lvl, mod=1, w=None, b=None, s=None, **kwd):
+    def __init__(self, dim, lvl, mod=None, w=None, b=None, s=None, **kwd):
         """
         Initialize the perceptron by specifying the the dimension of input
         and output.
@@ -72,10 +72,13 @@ class PcpOdr(Nnt):
 
         if b is None:
             if mod is 1:
+                b = np.zeros(dim[-1], dtype='float32')
+            elif mod is 2:
+                b = np.zeros((lvl - 1, 1, dim[-1]), dtype='float32')
+            else:
                 b = np.linspace(0, 1, lvl, dtype='float32')[0:lvl - 1]
                 b = b.repeat(dim[-1]).reshape(lvl - 1, 1, dim[-1])
-            else:
-                b = np.zeros((1, 1, dim[-1]), dtype='float32')
+
         b = S(b, 'b')
 
         self.w = w
@@ -84,7 +87,6 @@ class PcpOdr(Nnt):
         if s is None:
             s = T.nnet.sigmoid
         self.s = s
-
 
     # a Pcp cab be represented by the nonlinear funciton and I/O dimensions
     def __repr__(self):
@@ -109,14 +111,18 @@ class PcpOdr(Nnt):
         features x[j], k = 0 .. q indexes output feature y[k], and l = 0 ...
         r-1 indexes the output levels.
         """
-        if self.mod is 1:
-            c = self.s(T.dot(x, self.w) + self.b)
-            return T.concatenate(
-                [c[0:1], c[1:] - c[0:-1], 1 - c[-1:]], T.zeros_like(c[0:1]))
-        else:
-            # a = T.concatenate([self.b, T.zeros_like(self.b[0:1])])
-            i = T.dot(x, self.w) + self.b
-            return self.s(i.sum(0))
+        if self.mod is 1:       # treat input additively
+            v = np.linspace(0, 1, self.lvl, dtype='f4').reshape(self.lvl, 1, 1)
+            _ = (v * x)
+            return self.s(T.dot(_.sum(0), self.w) + self.b)
+        elif self.mod is 2:     # treat input as indicators
+            v = np.linspace(0, 1, self.lvl, dtype='f4').reshape(self.lvl, 1, 1)
+            _ = (v * x)
+            b = T.concatenate([self.b, T.zeros_like(self.b[0:1])])
+            return self.s(T.sum(T.dot(_, self.w) + b, 0))
+        else:                   # treat output
+            _ = self.s(T.dot(x, self.w) + self.b)
+            return T.concatenate([_[0:1], _[1:] - _[0:-1], 1 - _[-1:]])
 
     def CE(y, z):
         """ build symbolic expression of multinomial cross entrophy given the
@@ -132,7 +138,6 @@ class PcpOdr(Nnt):
         v = np.linspace(0, 1, lvl).reshape(lvl, 1, 1)
         y = (y * v).sum(0)
         z = (z * v).sum(0)
-        # return y, z
         return -(z * T.log(y) + (1 - z) * T.log(1 - y)).sum(-1).mean()
 
 

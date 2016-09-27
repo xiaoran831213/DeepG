@@ -128,25 +128,25 @@ def tst6():
     """ adaptive training for one autoendocer. """
     hlp.set_seed(None)
 
-    d1 = lpgz('../dat/d1.pgz')  # 2D dosages
-    d5 = lpgz('../dat/d5.pgz')  # 2D dosages
+    p1 = lpgz('../dat/p1.pgz')  # 2D dosages
+    p5 = lpgz('../dat/p5.pgz')  # 2D dosages
     b1 = lpgz('../dat/b1.pgz')  # 3D indicators
     b5 = lpgz('../dat/b5.pgz')  # 3D indicators
 
-    dm = d1.shape[-1] * np.power(2.0, [0, 1])
+    dm = p1.shape[-1] * np.power(2.0, [0, 1])
     dm = np.array(dm, 'i4')
 
     from rdm.sae import SAE
     a1 = SAE.from_dim(dm)
-    t1 = Trainer(a1, d1, d1, err=CE, reg=R1, lmd=.0, lrt=0.005, bsz=10)
+    t1 = Trainer(a1, p1, p1, err=CE, reg=R1, lmd=.0, lrt=0.005, bsz=10)
 
     from copy import deepcopy
     a2 = deepcopy(a1)
-    a2[+0] = Odr((dm[0], dm[1]), d2.shape[0], 0, w=a1[+0].w)
-    a2[-1] = Odr((dm[1], dm[0]), d2.shape[0], 1, w=a1[-1].w)
+    a2[+0] = Odr((dm[0], dm[1]), b1.shape[0], 1, w=a1[+0].w)
+    a2[-1] = Odr((dm[1], dm[0]), b1.shape[0], 0, w=a1[-1].w)
     t2 = Trainer(a2, b1, b1, err=Odr.CE, reg=R1, lmd=.0, lrt=0.005, bsz=10)
 
-    return a1, a2, t1, t2, d1, d2, d5, d6
+    return a1, a2, p1, p5, b1, b5, t1, t2
 
 
 def ts5():

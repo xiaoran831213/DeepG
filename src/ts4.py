@@ -8,6 +8,7 @@ from theano import tensor as T
 from utl import lpgz, spgz, hist
 from rdm.trainer import R1, R2, CE, L1, L2
 from pdb import set_trace
+from utl import hist
 
 
 def get_dat2(m=256, f='../raw/wgs/03.vcf.gz', d='012'):
@@ -79,22 +80,23 @@ def tst4():
     hlp.set_seed(None)
 
     # {0, .5, 1}
-    d1 = lpgz('../dat/d3.pgz') * np.array([0, .5, 1]).reshape(3, 1, 1).sum(0)
-    d5 = lpgz('../dat/d7.pgz') * np.array([0, .5, 1]).reshape(3, 1, 1).sum(0)
+    p1 = lpgz('../dat/p1.pgz')
+    p5 = lpgz('../dat/p5.pgz')
 
-    dm = d1.shape[-1] * np.power(2.0, [0, 1])
+    dm = p1.shape[-1] * np.power(2.0, [0, 1])
     dm = np.array(dm, 'i4')
 
     from rdm.sae import SAE
     a1 = SAE.from_dim(dm)
-    t1 = Trainer(a1, d1, d1, err=CE, reg=R1, lmd=.0, lrt=0.005, bsz=10)
+    t1 = Trainer(a1, p1, p1, err=CE, reg=R1, lmd=.0, lrt=0.005, bsz=10)
 
     from copy import deepcopy
     a2 = deepcopy(a1)
-    t2 = Trainer(a2, d1, d1, err=CE, reg=R1, lmd=.0, lrt=0.005, bsz=10)
-    a2[-1].s = flvl(2, 2.0)
+    alpha = hlp.S(np.ones((1, p1.shape[-1])))
+    a2[-1].s = flvl(2, alpha)
+    t2 = Trainer(a2, p1, p1, err=CE, reg=R1, lmd=.0, lrt=0.005, bsz=10)
 
-    return a1, a2, t1, t2, d1, d5
+    return a1, a2, t1, t2, p1, p5, alpha
 
 
 def tst5():

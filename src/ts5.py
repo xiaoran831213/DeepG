@@ -14,7 +14,7 @@ def flvl(lvl=2, a=20):
         l = lvl - 1
         t = x - T.arange(0, l, dtype='float32').reshape((l, 1, 1))
         i = T.nnet.sigmoid(a * t)
-        y = T.sum(i, 0) / l * (1 - 1e-6) + 1e-6
+        y = T.sum(i, 0) / l * (1 - 1e-30) + 5e-31
         return y
 
     return f
@@ -34,11 +34,11 @@ def ts5():
     from copy import deepcopy
 
     a1 = SAE.from_dim(dm)
-    t1 = Trainer(a1, p1, p1, err=CE, reg=R1, lmd=.0, lrt=0.01, bsz=10)
+    t1 = Trainer(a1, p1, p1, err=CE, reg=R1, lmd=.0, lrt=0.001, bsz=20)
 
     a2 = deepcopy(a1)
     h2 = hlp.S(1.0)
-    a2[-1].s = flvl(2, h2)
-    t2 = Trainer(a2, p1, p1, err=CE, reg=R1, lmd=.0, lrt=0.01, bsz=10)
+    a2[-1].s = flvl(3, h2)
+    t2 = Trainer(a2, p1, p1, err=CE, reg=R1, lmd=.0, lrt=0.001, bsz=20)
 
     return a1, a2, p1, p5, h2, t1, t2

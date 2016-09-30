@@ -197,9 +197,6 @@ class Trainer(object):
         up.append((self.bt, uBat))
         up.append((self.ep, uEph))
 
-        # update prediction
-        up.append((self.y, nnt(self.x)))
-
         # 3) the trainer functions
         # feed symbols with explicit data in batches
         # bts = {x: self.x[self.bt * self.bsz:(self.bt + 1) * self.bsz],
@@ -238,6 +235,10 @@ class Trainer(object):
 
         # * -------- historical records -------- *
         self.__hist__ = [self.__rpt__()]
+
+    # prediction (internal sample)
+    def yhat(self):
+        return self.nnt(self.x)
 
     def __rpt__(self):
         """ report current status """

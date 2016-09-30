@@ -133,11 +133,14 @@ class Trainer(object):
         self.lmd = S(lmd, 'LMD')
 
         # grand source and expect
+        self.nnt = nnt
         self.dim = (nnt.dim[0], nnt.dim[-1])
         x = S(np.zeros(bsz, self.dim[0]) if x is None else x)
         z = S(np.zeros(bsz, self.dim[1]) if z is None else z)
+        y = S(nnt(x).eval())
         self.x = x
         self.z = z
+        self.y = y
 
         # -------- helper expressions -------- *
         nsbj = T.cast(self.x.shape[0], 'int32')
@@ -193,6 +196,9 @@ class Trainer(object):
         uEph = self.ep + ((self.bt + 1) * self.bsz) // self.x.shape[-2]
         up.append((self.bt, uBat))
         up.append((self.ep, uEph))
+
+        # update prediction
+        up.append((self.y, nnt(self.x)))
 
         # 3) the trainer functions
         # feed symbols with explicit data in batches

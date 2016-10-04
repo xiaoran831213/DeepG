@@ -2,6 +2,7 @@ import numpy as np
 from theano import tensor as T
 from theano import function as F
 from .hlp import S, parms
+from time import time as tm
 
 
 def CE(y, z):
@@ -11,9 +12,7 @@ def CE(y, z):
 
     The first dimension denote unit of sampling
     """
-    d = -z * T.log(y) - (1 - z) * T.log(1 - y)
-    bySample = T.sum(d.flatten(ndim=2), axis=1)
-    return T.mean(bySample)
+    return -(z * T.log(y) + (1 - z) * T.log(1 - y))
 
 
 def L2(y, z):
@@ -23,9 +22,7 @@ def L2(y, z):
 
     The first dimension denote unit of sampling
     """
-    d = (y - z)**2
-    bySample = T.sqrt(T.sum(d.flatten(ndim=2), axis=1))
-    return T.mean(bySample)
+    return T.sqrt((y - z)**2)
 
 
 def L1(y, z):
@@ -35,9 +32,7 @@ def L1(y, z):
 
     The first dimension of y, z denote the batch size.
     """
-    d = abs(y - z)
-    bySample = T.sqrt(T.sum(d.flatten(ndim=2), axis=1))
-    return T.mean(bySample)
+    return abs(y - z)
 
 
 def R0(x, thd=1e-06):
@@ -68,6 +63,8 @@ class Trainer(object):
                  nnt,
                  x=None,
                  z=None,
+                 v_x=None,
+                 v_z=None,
                  err=None,
                  reg=None,
                  bsz=None,
@@ -89,6 +86,9 @@ class Trainer(object):
         z: the labels, with the first dimension standing for sample units.
         if unspecified, a simi-unsupervied training is assumed as the labels
         will be identical to the inputs.
+
+        v_x: the valication data inputs
+        v_z: the validation data labels
 
         err: an expression builder for training error.
         the builder should return an expression given the symbolic output
@@ -113,7 +113,7 @@ class Trainer(object):
         self.ep = S(0, 'ep')
 
         # training batch ppsize
-        bsz = 1 if bsz is None else bsz
+        bsz = 20 if bsz is None else bsz
         self.bsz = S(bsz, 'bsz', dtype='u4')
 
         # current batch index
@@ -137,22 +137,20 @@ class Trainer(object):
         self.dim = (nnt.dim[0], nnt.dim[-1])
         x = S(np.zeros(bsz, self.dim[0]) if x is None else x)
         z = S(np.zeros(bsz, self.dim[1]) if z is None else z)
-        y = S(nnt(x).eval())
-        self.x = x
-        self.z = z
-        self.y = y
+        self.x, self.z = x, z
+
+        v_x = S(v_x) if v_x is not None else v_x
+        v_z = S(v_z) if v_z is not None else v_z
+        self.v_x, self.v_z = v_x, v_z
 
         # -------- helper expressions -------- *
-        nsbj = T.cast(self.x.shape[0], 'int32')
-        bfrc = T.cast(nsbj % self.bsz, 'int32')
-        nbat = nsbj // self.bsz + T.cast(bfrc > 0, 'int32')
+        nsbj = T.cast(self.x.shape[-2], 'int32')
+        nbat = nsbj // self.bsz
 
         # -------- construct trainer function -------- *
         # 1) symbolic expressions
-        x = T.tensor(
-            name='x', dtype=x.dtype, broadcastable=x.broadcastable)
-        z = T.tensor(
-            name='z', dtype=z.dtype, broadcastable=z.broadcastable)
+        x = T.tensor(name='x', dtype=x.dtype, broadcastable=x.broadcastable)
+        z = T.tensor(name='z', dtype=z.dtype, broadcastable=z.broadcastable)
         y = nnt(x)  # the symbolic batch output
 
         # list of independant symbolic parameters to be tuned
@@ -166,9 +164,10 @@ class Trainer(object):
         wstd = T.std(vwgt)  # std.
 
         # symbolic batch cost
-        erro = err(y, z)  # erro function
+        # Mean erro of observations indexed by the second last subscript
+        erro = err(y, z).sum(-1).mean()
         wsum = reg(vwgt)  # weight sum
-        cost = erro + wsum * self.lmd
+        cost = erro + wstd * self.lmd
 
         # symbolic gradient of cost WRT parameters
         grad = T.grad(cost, pars)
@@ -212,7 +211,6 @@ class Trainer(object):
 
         # help functions
         self.nbat = F([], nbat, name="nbat")
-        self.bfrc = F([], bfrc, name="bfrc")
         self.nsbj = F([], nsbj, name="nsbj")
 
         # batch error, batch cost
@@ -233,45 +231,74 @@ class Trainer(object):
         self.gavg = F([], gavg, name="gavg", givens=bts)
         # * -------- done with trainer functions -------- *
 
+        # * -------- validation functions -------- *
+        if self.v_x is not None and self.v_z is not None:
+            vts = {x: self.v_x, z: self.v_z}
+            self.verr = F([], erro, name="verr", givens=vts)
+        else:
+            self.verr = lambda: 0
+
         # * -------- historical records -------- *
+        hd, rm = [], ['step', 'gavg', 'nwgt', 'berr', 'bcst']
+        for k, v in self.__dict__.items():
+            if k.startswith('__') or k in rm:
+                continue
+            if isinstance(v, type(self.lmd)) and v.ndim < 1:
+                hd.append((k, v.get_value))
+            if isinstance(v, type(self.step)):
+                hd.append((k, v))
+        self.__head__ = hd
+
+        self.__time__ = 0.0
+
+        # the first record
         self.__hist__ = [self.__rpt__()]
 
+        # printing format
+        self.__pfmt__ = ('{ep:04d}.{bt:03d}: '
+                         '{tcst:.2f} = {terr:.2f} + {lmd:.2e} * {wsum:.1f}, '
+                         '{wstd:.2f}, {gsum:.1f}, {lrt:.2e}')
+
     # prediction (internal sample)
-    def yhat(self):
-        return self.nnt(self.x)
+    def yhat(self, x=None):
+        """ calculate predicted outcome given input {x}. By default,
+        the training samples are to be sent as {x}."""
+        if x is None:
+            x = self.x
+        return self.nnt(x)
 
     def __rpt__(self):
-        """ report current status """
-        typ = T.sharedvar.TensorSharedVariable
-        shd = [(k, v.get_value().item()) for k, v in self.__dict__.items()
-               if type(v) is typ and v.size.eval() == 1]
+        """ report current status. """
+        s = [(k, f().item()) for k, f in self.__head__]
+        s.append(('time', self.__time__))
 
-        import theano
-        typ = theano.compile.function_module.Function
-        rmv = ['step', 'gavg']
-        tfn = [(k, v().item()) for k, v in self.__dict__.items()
-               if type(v) is typ and k not in rmv]
-
-        rpt = dict(shd + tfn)
-        return rpt
+        return dict(s)
 
     def tune(self, nep=1, nbt=0, rec=0, prt=0):
         """ tune the parameters by running the trainer {nep} epoch.
         nep: number of epoches to go through
-        npt: frequency of recording
+        nbt: number of extra batches to go through
+
+        rec: frequency of recording. 0 means record after each epoch,
+        which is the default, otherwise, record for each batch, which
+        can be time consuming.
+
+        prt: frequency of printing.
         """
         bt = self.bt
         b0 = bt.eval().item()  # starting batch
         ei, bi = 0, 0  # counted epochs and batches
 
         nep = nep + nbt // self.nbat().item()
-        nbt = nbt % self.bsz.eval().item()
+        nbt = nbt % self.nbat().item()
 
         while ei < nep or bi < nbt:
             # send one batch for training
+            t0 = tm()
             self.step()
-            bi = bi + 1  # batch count increase by 1
+            self.__time__ += tm() - t0
 
+            bi = bi + 1  # batch count increase by 1
             if rec > 0:  # record each batch
                 self.__hist__.append(self.__rpt__())
             if prt > 0:  # print each batch
@@ -282,7 +309,7 @@ class Trainer(object):
                 ei = ei + 1  # epoch count increase by 1
                 bi = 0  # reset batch count
 
-            # see the next epoch relative to batch 0?
+            # record or print after an epoch
             if bt.eval().item() == 0:
                 if rec == 0:  # record at new epoch
                     self.__hist__.append(self.__rpt__())
@@ -305,25 +332,53 @@ class Trainer(object):
         else:
             hs = hs[ix]
 
-        # printing format
-        st = ('{ep:04d}.{bt:04d}: '
-              '{tcst:9.4f} = {terr:9.4f} + {lmd:8.6f} * {wsum:7.1f}, '
-              '{wstd:4f}, {gsum:4f}, {lrt:5f}')
-
         # latest history
         for h in hs:
-            print(st.format(**h))
+            print(self.__pfmt__.format(**h))
 
+    def query(self, fc=None, rc=None, out=None):
+        """ report the trainer's history.
+        fc: the field checker, can be a function taking a string field name,
+        or a list of field names. by default no checking is imposed.
+        rc: the record checker, a function taking a dictionary record.
+        by default all record will pass.
+        e.g.:
+        >>> query(rc=lambda r: r['eq']<10)  # return the first 10 epoch
+        
+        out: the file to flush the output. if specified, the query result is
+        written to a a tab-delimited file. if 0 is specified, the STDOUT will
+        be used.
+        """
+        hs = self.__hist__
+        h0 = hs[0]
 
-def test_trainer():
-    """ test_trainer """
-    import os.path as pt
-    x = np.load(pt.expandvars('$AZ_SP1/lh001F1.npz'))['vtx']['tck']
-    x = np.asarray(x, dtype='<f4')
-    # x = hlp.rescale01(x)
-    d = x.shape[1]
+        # field checker
+        if fc is None:
+            def fc1(f): return True
+        elif '__iter__' in dir(fc):
+            def fc1(f): return f in fc
+        else:
+            fc1 = fc
 
-    from sae import SAE
-    m = SAE.from_dim([d / 1, d / 2, d / 4])
-    # t = Trainer(m.z, src = x, xpt = x, lrt = 0.01)
-    return x, m
+        # record checker
+        if rc is None:
+            def rc1(**r): return True
+        else:
+            rc1 = rc
+
+        # numpy types from python native types
+        tp = {float: 'f4', int: 'i4'}
+        tp = np.dtype([(k, tp[type(v)]) for k, v in h0.items() if fc1(k)])
+
+        # numpy data
+        dt = [tuple(v for k, v in _.items() if fc1(k)) for _ in hs if rc1(**_)]
+        dt = np.array(dt, tp)
+
+        if out is not None:
+            # output format
+            fm = {float: '%f', int: '%d'}
+            fm = '\t'.join([fm[type(v)] for k, v in h0.items() if fc1(k)])
+            hd = '\t'.join(dt.dtype.names)
+            np.savetxt(out, dt, fm, header=hd)
+
+        return dt

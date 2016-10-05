@@ -17,7 +17,7 @@ def flvl(lv=2, a=20):
         tk = tk.reshape((lv-1, 1, 1))
         mu = _x - tk
         pd = T.nnet.sigmoid(a * mu)
-        return T.sum(pd, 0) / (lv - 1)  # * (1 - 1e-44) + 5e-45
+        return T.sum(pd, 0) / (lv - 1) * (1 - 1e-6) + 5e-7
     return f
 
 
@@ -28,21 +28,23 @@ def ts5():
     p1 = np.array(lpgz('../dat/p1.pgz'), dtype='<f4')
     p5 = np.array(lpgz('../dat/p5.pgz'), dtype='<f4')
 
-    dm = p1.shape[-1] * np.power(2.0, [0, 1, 0, -1, -2, -3])
+    dm = p1.shape[-1] * np.power(2.0, [0, 2, 1, 0, -1, -2, -3, -4])
     dm = np.array(dm, 'i4')
 
     from rdm.sae import SAE
     from copy import deepcopy
 
-    a1 = SAE.from_dim(dm)
+    a0 = SAE.from_dim(dm)
+
+    a1 = deepcopy(a0)
     t1 = Trainer(
-        a1, p1, p1, v_x=p5, v_z=p5, err=CE, reg=R1, lmd=.0, lrt=0.001, bsz=10)
+        a1, p1, p1, v_x=p5, v_z=p5, err=CE, reg=R1, lmd=.0, lrt=0.005, bsz=10)
 
     a2 = deepcopy(a1)
     h2 = hlp.S(1.0)
     a2[-1].s = flvl(3, h2)
     t2 = Trainer(
-        a2, p1, p1, v_x=p5, v_z=p5, err=CE, reg=R1, lmd=.0, lrt=0.001, bsz=10)
+        a2, p1, p1, v_x=p5, v_z=p5, err=CE, reg=R1, lmd=.0, lrt=0.005, bsz=10)
 
     return a1, a2, p1, p5, h2, t1, t2
 

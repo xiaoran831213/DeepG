@@ -38,13 +38,14 @@ def ts5():
 
     a1 = deepcopy(a0)
     t1 = Trainer(
-        a1, p1, p1, v_x=p5, v_z=p5, err=CE, reg=R1, lmd=.0, lrt=0.005, bsz=10)
+        a1, p1, p1, v_x=p5, v_z=p5, err=CE, reg=R1, lmd=.0, lrt=0.002, bsz=10)
 
     a2 = deepcopy(a1)
-    h2 = hlp.S(1.0)
+    h2, h3 = hlp.S(1.0), hlp.S(1.0)
     a2[-1].s = flvl(3, h2)
+    a2[-2].S = flvl(2, h3)
     t2 = Trainer(
-        a2, p1, p1, v_x=p5, v_z=p5, err=CE, reg=R1, lmd=.0, lrt=0.005, bsz=10)
+        a2, p1, p1, v_x=p5, v_z=p5, err=CE, reg=R1, lmd=.0, lrt=0.002, bsz=10)
 
     return a1, a2, p1, p5, h2, t1, t2
 

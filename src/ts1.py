@@ -1,76 +1,10 @@
 import numpy as np
 from rdm import hlp
 from rdm.cat import Cat
-from rdm.pcp import Pcp
-from rdm.pcp_odr import PcpOdr
 from rdm.trainer import Trainer
 from utl import lpgz, spgz
 from rdm.trainer import R1, R2, CE, L1, L2
 from pdb import set_trace
-
-
-def get_dat1(m=256, f='../raw/wgs/03.vcf.gz'):
-    """ get dosage data """
-    from gsq.vsq import DsgVsq
-    from random import randint
-    pos = randint(0, 10000000)
-    # raw dosage value in {0, 1, 2}
-    itr = DsgVsq(f, bp0=pos, wnd=m, dsg='011')
-    dat = next(itr)
-
-    idx = np.random.permutation(dat.shape[0])
-    dat = dat[idx, ]
-    return np.array(dat, 'i4')
-
-
-def get_dat2(m=256, f='../raw/wgs/03.vcf.gz'):
-    """ get dosage data """
-    from gsq.vsq import DsgVsq
-    from random import randint
-    pos = randint(0, 10000000)
-    # raw dosage value in {0, 1, 2}
-    itr = DsgVsq(f, bp0=pos, wnd=m, dsg='012')
-    dat = next(itr)
-
-    idx = np.random.permutation(dat.shape[0])
-    dat = dat[idx, ]
-    return np.array(dat, 'i4') / 2
-
-
-def get_dat3(m=256, f='../raw/wgs/03.vcf.gz'):
-    """ get dosage data """
-    from gsq.vsq import DsgVsq
-    from random import randint
-    pos = randint(0, 18000000)
-
-    itr = DsgVsq(f, bp0=pos, wnd=m, dsg='012')
-    dat = next(itr)
-
-    idx = np.random.permutation(dat.shape[0])
-    dat = dat[idx, ]
-
-    ret = np.ndarray((3, dat.shape[0], dat.shape[1]), dtype='f4')
-    for i in np.arange(3):
-        ret[i, ] = dat == i
-    return ret
-
-
-def get_SDA(dm):
-    """ create an stacked auto encoder """
-    dms = list(zip(dm[:-1], dm[1:], range(len(dm))))
-    ecs = [Pcp((i, j), tag='E{}'.format(t)) for i, j, t in dms]
-    dcs = [Pcp((j, i), tag='D{}'.format(t)) for i, j, t in dms]
-
-    # constraint weight terms
-    for ec, dc in zip(ecs, dcs):
-        dc.w = ec.w.T
-
-    # wire them up
-    dcs.reverse()
-    aes = ecs + dcs
-    stk = Cat(*aes)
-
-    return stk
 
 
 def pre_train1(stk, dat, trainers=None, rep=1, nep=5, reg=R1, lmd=.1):

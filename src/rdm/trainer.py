@@ -3,6 +3,7 @@ from theano import tensor as T
 from theano import function as F
 from .hlp import S, parms
 from time import time as tm
+from matplotlib import pyplot as plt
 
 
 def CE(y, z):
@@ -167,7 +168,7 @@ class Trainer(object):
         # Mean erro of observations indexed by the second last subscript
         erro = err(y, z).sum(-1).mean()
         wsum = reg(vwgt)  # weight sum
-        cost = erro + wstd * self.lmd
+        cost = erro + wsum * self.lmd
 
         # symbolic gradient of cost WRT parameters
         grad = T.grad(cost, pars)
@@ -198,8 +199,6 @@ class Trainer(object):
 
         # 3) the trainer functions
         # feed symbols with explicit data in batches
-        # bts = {x: self.x[self.bt * self.bsz:(self.bt + 1) * self.bsz],
-        #        z: self.z[self.bt * self.bsz:(self.bt + 1) * self.bsz]}
         bts = T.arange((self.bt + 0) * self.bsz, (self.bt + 1) * self.bsz)
         bts = {x: self.x.take(bts, -2, 'wrap'),
                z: self.z.take(bts, -2, 'wrap')}
@@ -354,15 +353,21 @@ class Trainer(object):
 
         # field checker
         if fc is None:
-            def fc1(f): return True
+
+            def fc1(f):
+                return True
         elif '__iter__' in dir(fc):
-            def fc1(f): return f in fc
+
+            def fc1(f):
+                return f in fc
         else:
             fc1 = fc
 
         # record checker
         if rc is None:
-            def rc1(**r): return True
+
+            def rc1(**r):
+                return True
         else:
             rc1 = rc
 
@@ -382,3 +387,29 @@ class Trainer(object):
             np.savetxt(out, dt, fm, header=hd)
 
         return dt
+
+    def plot(self, dx=None, dy=None):
+        """ plot the training graph.
+        dx: dimension on x axis, by default it is time.
+        dy: dimensions on y axis, by defaut it is training and validation
+        errors (if available).
+        """
+        if dx is None:
+            dx = ['time']
+        if dy is None:
+            dy = ['terr']
+            if self.v_z and self.v_z:
+                dy = dy + ['verr']
+        else:
+            if '__iter__' not in dir(dy):
+                dy = [dy]
+
+        clr = 'bgrcmykw'
+        dat = self.query(fc=dx + dy)
+
+        plt.close()
+        x = dx[0]
+        for i, y in enumerate(dy):
+            plt.plot(dat[x], dat[y], c=clr[i])
+
+        return plt

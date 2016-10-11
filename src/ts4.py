@@ -149,25 +149,3 @@ def tst6():
     t2 = Trainer(a2, b1, b1, err=Odr.CE, reg=R1, lmd=.0, lrt=0.005, bsz=10)
 
     return a1, a2, p1, p5, b1, b5, t1, t2
-
-
-def ts5():
-    b = np.repeat([1, 2], 256).reshape(2, 1, 256)
-    o = Odr((512, 256), 3, b=b)
-    x = np.random.uniform(0, 1, 1750 * 256).reshape(1750, 256)
-    w = o.w.eval()
-    b = o.b.eval()
-    i = x.dot(w) + b
-    p = o.s(i).eval()
-    return o, x, w, b, i, p
-
-
-def ts6():
-    b = np.repeat([1, 2], 512).reshape(2, 1, 512)
-    o = Odr((256, 512), 3, mod=0, b=b)
-
-    x = get_dat3(256)
-
-    w = o.w.eval()
-    b = o.b.eval()
-    return o, x, w, b

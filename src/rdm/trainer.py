@@ -2,8 +2,10 @@ import numpy as np
 import theano
 from theano import tensor as T
 from theano import function as F
+import sys
 try:
-    from .hlp import S, C, parms, paint
+    sys.path.extend(['..'] if '..' not in sys.path else [])
+    from hlp import S, C, parms, paint
 except ValueError as e:
     from hlp import S, C, parms, paint
 

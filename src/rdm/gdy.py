@@ -60,17 +60,17 @@ def main(**kwd):
     sav = kwd.get('sav')
     ovr = kwd.get('ovr', False)
     if sav and pt.exists(sav):
-        print "exists: ", sav
+        print("exists: ", sav)
         if not ovr:
-            print ", skip."
+            print(", skip.")
             return kwd
 
     # save
     if sav:
         if pt.exists(sav):
-            print "overwrite: ", sav
+            print("overwrite: ", sav)
         else:
-            print "write: ", sav
+            print("write: ", sav)
         spz(sav, kwd)
     return kwd
 

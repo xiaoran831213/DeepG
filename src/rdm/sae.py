@@ -1,6 +1,8 @@
+import sys
 try:
-    from .ae import AE
-    from .cat import Cat
+    sys.path.extend(['..'] if '..' not in sys.path else [])
+    from rdm.ae import AE
+    from rdm.cat import Cat
 except ValueError as e:
     from ae import AE
     from cat import Cat
@@ -59,7 +61,3 @@ class SAE(Cat):
             import copy
             ret = copy.deepcopy(ret)
         return ret
-
-
-if __name__ == '__main__':
-    pass

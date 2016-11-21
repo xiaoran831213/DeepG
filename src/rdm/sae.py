@@ -1,5 +1,9 @@
-from .ae import AE
-from .cat import Cat
+try:
+    from .ae import AE
+    from .cat import Cat
+except ValueError as e:
+    from ae import AE
+    from cat import Cat
 
 
 class SAE(Cat):

@@ -1,12 +1,20 @@
 import numpy as np
+import theano
 from theano import tensor as T
 from theano import function as F
-from .hlp import S, parms
+try:
+    from .hlp import S, C, parms, paint
+except ValueError as e:
+    from hlp import S, C, parms, paint
+
 from time import time as tm
+import sys
 from matplotlib import pyplot as plt
+from pdb import set_trace
+FX = theano.config.floatX
 
 
-def CE(y, z):
+def __err_CE__(y, z):
     """ symbolic expression of cross entrophy
     y: produced output
     z: expected output
@@ -16,8 +24,8 @@ def CE(y, z):
     return -(z * T.log(y) + (1 - z) * T.log(1 - y))
 
 
-def L2(y, z):
-    """ symbolic expression of L2 norm
+def __err_L2__(y, z):
+    """ symbolic expression of __err_L2__ norm
     y: produced output
     z: expected output
 
@@ -26,8 +34,8 @@ def L2(y, z):
     return T.sqrt((y - z)**2)
 
 
-def L1(y, z):
-    """ symbolic expression of L1 norm
+def __err_L1__(y, z):
+    """ symbolic expression of __err_L1__ norm
     y: produced output
     z: expected output
 
@@ -35,24 +43,32 @@ def L1(y, z):
     """
     return abs(y - z)
 
+__errs__ = {
+    None: __err_CE__,
+    'CE': __err_CE__,
+    'L1': __err_L1__,
+    'L2': __err_L2__}
 
-def R0(x, thd=1e-06):
+
+def __reg_L0__(x, thd=1e-06):
     """ build expression of L0 norm given a vector. """
-    return T.sum((T.abs_(x) > thd), dtype='float32')
+    return T.sum((T.abs_(x) > thd), dtype=FX)
 
 
-def R1(x):
-    """ build expression of L1 norm given a vector. """
+def __reg_L1__(x):
+    """ build expression of __err_L1__ norm given a vector. """
     return T.sum(T.abs_(x))
 
 
-def R2(x):
-    """ build expression of L2 norm given a vector. """
+def __reg_L2__(x):
+    """ build expression of __err_L2__ norm given a vector. """
     return T.sqrt(T.sum(x**2))
 
-
-def RN(lsW):
-    return S(.0, name='RN')
+__regs__ = {
+    None: __reg_L1__,
+    'L0': __reg_L0__,
+    'L1': __reg_L1__,
+    'L2': __reg_L2__}
 
 
 class Trainer(object):
@@ -60,20 +76,7 @@ class Trainer(object):
     Class for neural network training.
     """
 
-    def __init__(self,
-                 nnt,
-                 x=None,
-                 z=None,
-                 v_x=None,
-                 v_z=None,
-                 err=None,
-                 reg=None,
-                 bsz=None,
-                 mmt=None,
-                 lrt=None,
-                 lmd=None,
-                 rpt_frq=None,
-                 thd=1e-6):
+    def __init__(self, nnt, x=None, z=None, u=None, v=None, **kwd):
         """
         Constructor.
         : -------- parameters -------- :
@@ -88,65 +91,84 @@ class Trainer(object):
         if unspecified, a simi-unsupervied training is assumed as the labels
         will be identical to the inputs.
 
-        v_x: the valication data inputs
-        v_z: the validation data labels
+        u: the valication data inputs
+        v: the validation data labels
 
-        err: an expression builder for training error.
-        the builder should return an expression given the symbolic output
-        {y}, and the label {z}. the expression must evaluate to a scalar.
+        : -------- kwd: keywords -------- :
+        -- bsz: size of a training batch
+        -- lrt: basic learning rate
+        -- lmb: weight decay factor, the lambda
 
-        reg: an expression builder for weight regulator.
-        The builder should return an expression given the list of  weights
-        to be shrunken. The expression must evaluate to a scalar.
+        -- err: expression builder for the computation of training error
+        between the network output {y} and the label {z}. the expression
+        must evaluate to a scalar.
 
-        bsz: size of a training batch
-        mmt: momentom
-        lrt: basic learning rate
-        lmb: weight decay factor, the lambda
+        -- reg: expression builder for the computation of weight panalize
+        the vector of parameters {w}, the expression must evaluate to a
+        scalar.
+
+        -- mmt: momentom of the trainer
+
+        -- vdr: validation disruption rate
         """
-        # expression builder of error
-        err = CE if err is None else err
+        # numpy random number generator
+        seed = kwd.pop('seed', None)
+        nrng = kwd.pop('nrng', np.random.RandomState(seed))
 
-        # expression builder of weight regulator
-        reg = RN if reg is None else reg
+        from theano.tensor.shared_randomstreams import RandomStreams
+        trng = kwd.pop('trng', RandomStreams(nrng.randint(0x7FFFFFFF)))
 
-        # current epoch index
-        self.ep = S(0, 'ep')
+        # private members
+        self.__seed__ = seed
+        self.__nrng__ = nrng
+        self.__trng__ = trng
+        
+        # expression of error and regulator terms
+        err = __errs__[kwd.get('err')]
+        reg = __regs__[kwd.get('reg')]
 
-        # training batch ppsize
-        bsz = 20 if bsz is None else bsz
-        self.bsz = S(bsz, 'bsz', dtype='u4')
+        # the validation disruption
+        self.vdr = S(kwd.get('vdr'), 'VDR')
 
-        # current batch index
-        self.bt = S(0, 'bt')
+        # current epoch index, use int64
+        self.ep = S(0, 'EP')
+
+        # training batch ppsize, use int64
+        bsz = kwd.get('bsz', 20)
+        self.bsz = S(bsz, 'BSZ')
+
+        # current batch index, use int64
+        self.bt = S(0, 'BT')
 
         # momentumn, make sure momentum is a sane value
-        mmt = 0.0 if mmt is None else mmt
-        assert mmt < 1.0 and mmt >= 0.0
+        mmt = kwd.get('mmt', .0)
         self.mmt = S(mmt, 'MMT')
 
         # learning rate
-        lrt = 0.01 if lrt is None else lrt
+        lrt = kwd.get('lrt', .01)
+        lrt_inc = kwd.get('inc', 1.04)
+        lrt_dec = kwd.get('dec', 0.5)
         self.lrt = S(lrt, 'LRT')
+        self.lrt_inc = S(lrt_inc, 'LRT_INC')
+        self.lrt_dec = S(lrt_dec, 'LRT_DEC')
 
         # the raio of weight decay, lambda
-        lmd = 0.1 if lmd is None else lmd
+        lmd = kwd.get('lmd', .0)
         self.lmd = S(lmd, 'LMD')
 
-        # grand source and expect
+        # the neural network
         self.nnt = nnt
         self.dim = (nnt.dim[0], nnt.dim[-1])
-        x = S(np.zeros(bsz, self.dim[0]) if x is None else x)
-        z = S(np.zeros(bsz, self.dim[1]) if z is None else z)
-        self.x, self.z = x, z
 
-        v_x = S(v_x) if v_x is not None else v_x
-        v_z = S(v_z) if v_z is not None else v_z
-        self.v_x, self.v_z = v_x, v_z
+        # superium of gradient
+        self.gsup = S(.0)
 
-        # -------- helper expressions -------- *
-        nsbj = T.cast(self.x.shape[-2], 'int32')
-        nbat = nsbj // self.bsz
+        # inputs and labels, for modeling and validation
+        x = S(np.zeros((bsz * 2, self.dim[0]), 'f') if x is None else x)
+        z = x if z is None else S(z)
+        u = x if u is None else S(u)
+        v = u if v is None else S(v)
+        self.x, self.z, self.u, self.v = x, z, u, v
 
         # -------- construct trainer function -------- *
         # 1) symbolic expressions
@@ -156,30 +178,31 @@ class Trainer(object):
 
         # list of independant symbolic parameters to be tuned
         pars = parms(y)  # parameters
-        npar = T.sum([p.size for p in pars])  # count
 
         # list of  symbolic weights to apply decay
-        wgts = [p for p in pars if p.name == 'w']  # weights
+        wgts = [p for p in pars if p.name == 'w']         # weights
         vwgt = T.concatenate([w.flatten() for w in wgts])  # vecter
-        nwgt = vwgt.size  # count
-        wstd = T.std(vwgt)  # std.
 
         # symbolic batch cost
         # Mean erro of observations indexed by the second last subscript
         erro = err(y, z).sum(-1).mean()
         wsum = reg(vwgt)  # weight sum
         cost = erro + wsum * self.lmd
+        self.__cost__ = cost
 
         # symbolic gradient of cost WRT parameters
         grad = T.grad(cost, pars)
-        gsum = T.sqrt(T.sum([T.square(g).sum() for g in grad]))
-        gavg = gsum / npar  # average over paramter
+        gabs = T.concatenate([T.abs_(g.flatten()) for g in grad])
+        gsup = T.max(gabs)
 
+        # trainer control
+        nwep = ((self.bt + 1) * self.bsz) // self.x.shape[-2]  # new epoch?
+        
         # 2) define updates after each batch training
-        ZPG = list(zip(pars, grad))
         up = []
+
         # update parameters using gradiant decent, and momentum
-        for p, g in ZPG:
+        for p, g in zip(pars, grad):
             # initialize accumulated gradient
             # NOTE: p.eval() causes mehem!!
             h = S(np.zeros_like(p.get_value()))
@@ -192,29 +215,18 @@ class Trainer(object):
             up.append((p, p - self.lrt * h))
 
         # update batch and eqoch index
-        uBat = (((self.bt + 1) * self.bsz) % self.x.shape[-2]) // self.bsz
-        uEph = self.ep + ((self.bt + 1) * self.bsz) // self.x.shape[-2]
-        up.append((self.bt, uBat))
-        up.append((self.ep, uEph))
+        up.append((self.bt, (self.bt + 1) * (1 - nwep)))
+        up.append((self.ep, self.ep + nwep))
 
         # 3) the trainer functions
-        # feed symbols with explicit data in batches
-        bts = T.arange((self.bt + 0) * self.bsz, (self.bt + 1) * self.bsz)
-        bts = {x: self.x.take(bts, -2, 'wrap'),
-               z: self.z.take(bts, -2, 'wrap')}
+        # feed symbols with actual data in batches
+        _ = T.arange((self.bt + 0) * self.bsz, (self.bt + 1) * self.bsz)
+        bts = {x: self.x.take(_, -2, 'wrap'), z: self.z.take(_, -2, 'wrap')}
         dts = {x: self.x, z: self.z}
 
         # each invocation sends one batch of training examples to the network,
         # calculate total cost and tune the parameters by gradient decent.
         self.step = F([], cost, name="step", givens=bts, updates=up)
-
-        # help functions
-        self.nbat = F([], nbat, name="nbat")
-        self.nsbj = F([], nsbj, name="nsbj")
-
-        # batch error, batch cost
-        self.berr = F([], erro, name="berr", givens=bts)
-        self.bcst = F([], cost, name="cost", givens=bts)
 
         # training error, training cost
         self.terr = F([], erro, name="terr", givens=dts)
@@ -222,56 +234,86 @@ class Trainer(object):
 
         # weights, and parameters
         self.wsum = F([], wsum, name="wsum")
-        self.wstd = F([], wstd, name="wstd")
-        self.nwgt = F([], nwgt, name="nwgt")
-        self.grad = dict([(p, F([], g, givens=bts)) for p, g in ZPG])
-        self.npar = F([], npar, name="npar")
-        self.gsum = F([], gsum, name="gsum", givens=bts)
-        self.gavg = F([], gavg, name="gavg", givens=bts)
+        self.gsup = F([], gsup, name="gsup", givens=bts)
         # * -------- done with trainer functions -------- *
 
         # * -------- validation functions -------- *
-        if self.v_x is not None and self.v_z is not None:
-            vts = {x: self.v_x, z: self.v_z}
-            self.verr = F([], erro, name="verr", givens=vts)
+        # enable validation binary disruption (binary)?
+        if self.vdr:
+            _ = self.__trng__.binomial(self.v.shape, 1, self.vdr, dtype=FX)
+            vts = {x: self.u, z: (self.v + _) % C(2.0, FX)}
         else:
-            self.verr = lambda: 0
+            vts = {x: self.u, z: self.v}
+        self.verr = F([], erro, name="verr", givens=vts)
 
-        # * -------- historical records -------- *
+        # * ---------- logging and recording ---------- *
         hd, rm = [], ['step', 'gavg', 'nwgt', 'berr', 'bcst']
         for k, v in self.__dict__.items():
             if k.startswith('__') or k in rm:
                 continue
             if isinstance(v, type(self.lmd)) and v.ndim < 1:
                 hd.append((k, v.get_value))
+            if isinstance(v, type(self.bsz)) and v.ndim < 1:
+                hd.append((k, v.get_value))
             if isinstance(v, type(self.step)):
                 hd.append((k, v))
-        self.__head__ = hd
 
-        self.__time__ = 0.0
+        self.__head__ = hd
+        self.__time__ = .0
 
         # the first record
         self.__hist__ = [self.__rpt__()]
+        self.__gsup__ = self.__hist__[0]['gsup']
+        self.__einf__ = self.__hist__[0]['terr']
+        self.__nnt0__ = paint(self.nnt)
 
         # printing format
-        self.__pfmt__ = ('{ep:04d}.{bt:03d}: '
-                         '{tcst:.2f} = {terr:.2f} + {lmd:.2e} * {wsum:.1f}, '
-                         '{wstd:.2f}, {gsum:.1f}, {lrt:.2e}')
+        self.__pfmt__ = (
+            '{ep:04d}.{bt:03d}: {tcst:.2f} = {terr:.2f} + {lmd:.2e}*{wsum:.1f}'
+            '|{verr:.2f}, {gsup:.2e}, {lrt:.2e}')
 
-    # prediction (internal sample)
-    def yhat(self, x=None):
-        """ calculate predicted outcome given input {x}. By default,
-        the training samples are to be sent as {x}."""
-        if x is None:
-            x = self.x
-        return self.nnt(x)
+    # -------- helper funtions -------- *
+    def nsbj(self):
+        return self.x.get_value().shape[-2]
+
+    def nbat(self):
+        return self.x.get_value().shape[-2] // self.bsz.get_value()
+
+    def yhat(self, x=None, evl=True):
+        """
+        Predicted outcome given input {x}. By default, use the training samples
+        as input.
+        """
+        y = self.nnt(self.x if x is None else x)
+        return y.eval() if evl else y
 
     def __rpt__(self):
         """ report current status. """
         s = [(k, f().item()) for k, f in self.__head__]
         s.append(('time', self.__time__))
-
         return dict(s)
+
+    def __onep__(self):
+        """ called on new epoch. """
+        # history records
+        h = self.__hist__
+        
+        # update the learning rate and suprimum of gradient
+        # if h[-1]['gsup'] < self.__gsup__:  # accelerate
+        #     self.lrt.set_value(self.lrt.get_value() * self.lrt_inc.get_value())
+        #     paint(self.nnt, self.__nnt0__)
+        #     self.__gsup__ = h[-1]['gsup']
+        # else:                   # slow down
+        #     self.lrt.set_value(self.lrt.get_value() * self.lrt_dec.get_value())
+        #     paint(self.__nnt0__, self.nnt)
+        if h[-1]['terr'] < self.__einf__:  # accelerate
+            self.lrt.set_value(self.lrt.get_value() * self.lrt_inc.get_value())
+            paint(self.nnt, self.__nnt0__)
+            self.__einf__ = h[-1]['terr']
+        else:                   # slow down
+            self.lrt.set_value(self.lrt.get_value() * self.lrt_dec.get_value())
+            paint(self.__nnt0__, self.nnt)
+        
 
     def tune(self, nep=1, nbt=0, rec=0, prt=0):
         """ tune the parameters by running the trainer {nep} epoch.
@@ -285,11 +327,11 @@ class Trainer(object):
         prt: frequency of printing.
         """
         bt = self.bt
-        b0 = bt.eval().item()  # starting batch
-        ei, bi = 0, 0  # counted epochs and batches
+        b0 = bt.eval().item()   # starting batch
+        ei, bi = 0, 0           # counted epochs and batches
 
-        nep = nep + nbt // self.nbat().item()
-        nbt = nbt % self.nbat().item()
+        nep = nep + nbt // self.nbat()
+        nbt = nbt % self.nbat()
 
         while ei < nep or bi < nbt:
             # send one batch for training
@@ -297,6 +339,7 @@ class Trainer(object):
             self.step()
             self.__time__ += tm() - t0
 
+            # update history
             bi = bi + 1  # batch count increase by 1
             if rec > 0:  # record each batch
                 self.__hist__.append(self.__rpt__())
@@ -304,16 +347,21 @@ class Trainer(object):
                 self.cout()
 
             # see the next epoch relative to batch b0?
-            if bt.eval().item() == b0:
+            if bt.get_value().item() == b0:
                 ei = ei + 1  # epoch count increase by 1
                 bi = 0  # reset batch count
 
-            # record or print after an epoch
-            if bt.eval().item() == 0:
+            # after an epoch
+            if bt.get_value().item() == 0:
+                # record history
                 if rec == 0:  # record at new epoch
                     self.__hist__.append(self.__rpt__())
+                # print
                 if prt == 0:  # print
                     self.cout()
+
+                if self.__onep__:
+                    self.__onep__()
 
     def cout(self, ix=None):
         """
@@ -334,6 +382,7 @@ class Trainer(object):
         # latest history
         for h in hs:
             print(self.__pfmt__.format(**h))
+        sys.stdout.flush()
 
     def query(self, fc=None, rc=None, out=None):
         """ report the trainer's history.
@@ -388,6 +437,12 @@ class Trainer(object):
 
         return dt
 
+    def reset(self):
+        """ reset training records. """
+        self.ep.set_value(0)
+        self.bt.set_value(0)
+        self.__hist__ = [self.__rpt__()]
+
     def plot(self, dx=None, dy=None):
         """ plot the training graph.
         dx: dimension on x axis, by default it is time.
@@ -398,7 +453,7 @@ class Trainer(object):
             dx = ['time']
         if dy is None:
             dy = ['terr']
-            if self.v_z and self.v_z:
+            if self.u and self.v:
                 dy = dy + ['verr']
         else:
             if '__iter__' not in dir(dy):

@@ -94,3 +94,7 @@ dat
 
 # backups
 *~
+
+# R files
+.RData
+.Rhistory

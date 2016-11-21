@@ -1,5 +1,9 @@
-from .cat import Cat
-from .pcp import Pcp
+try:
+    from .cat import Cat
+    from .pcp import Pcp
+except ValueError as e:
+    from cat import Cat
+    from pcp import Pcp
 
 
 class AE(Cat):

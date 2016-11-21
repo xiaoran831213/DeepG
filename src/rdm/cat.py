@@ -1,4 +1,7 @@
-from .nnt import Nnt
+try:
+    from .nnt import Nnt
+except ValueError as e:
+    from nnt import Nnt
 
 
 class Cat(Nnt):

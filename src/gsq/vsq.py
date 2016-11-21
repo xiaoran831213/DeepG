@@ -30,26 +30,37 @@ class DsgVsq:
         # the chromosome and its length
         chm = gv1.CHROM if chm is None else CKY[chm]
         cln = vgz.contigs[chm].length
+        self.CHR = int(chm)
+
+        # starting position
+        bp0 = bp0 % cln
 
         # ending position
         if not bp1:
             bp1 = cln
-        elif bp1 < 0:
+        if bp1 < 0:
             bp1 = cln + bp1
 
         # restrict VCF range
         vgz = vgz.fetch(chm, bp0, bp1)
 
         # private members
+        self.__chm__ = chm
         self.__pos__ = bp0  # the pointer
         self.__vgz__ = vgz  # vcf reader
         self.__bp0__ = bp0  # starting position
         self.__bp1__ = bp1  # ending position
         self.__wnd__ = wnd
         self.__dsg__ = dsg
+        self.__pos__ = []
+        self.__vid__ = []
 
     def __next__(self):
         d = np.zeros((len(self.__vgz__.samples), self.__wnd__), '<i1')
+        a = np.zeros((len(self.__vgz__.samples), self.__wnd__), '<i1')
+        b = np.zeros((len(self.__vgz__.samples), self.__wnd__), '<i1')
+        self.__pos__ = [None] * self.__wnd__
+        self.__vid__ = [None] * self.__wnd__
         i = 0
         while (i < self.__wnd__):
             # get next variant
@@ -58,20 +69,43 @@ class DsgVsq:
             except StopIteration as e:
                 raise e
 
+            self.__pos__[i] = v.POS
+            self.__vid__[i] = v.ID
+
             # get dosage values
-            v = [int(g.gt_alleles[0] > '0') + int(g.gt_alleles[1] > '0')
-                 for g in v.samples]
-            d[:, i] = np.array(v, '<i1')
+            a[:, i] = np.array(
+                [int(g.gt_alleles[0] > '0') for g in v.samples], '<i1')
+            b[:, i] = np.array(
+                [int(g.gt_alleles[1] > '0') for g in v.samples], '<i1')
             i = i + 1
 
-        # the coding of allele counts
-        d = np.array([int(c) for c in self.__dsg__], '<i1')[d]
+        # make sure a >= b, so the order of allele apparence does not matter.
+        _ = (a - b) < 0
+        a[_] = 1
+        b[_] = 0
 
+        # the coding of allele counts
+        if self.__dsg__:
+            d = np.array([int(c) for c in self.__dsg__], '<i1')[a + b]
+        else:
+            d = np.dstack((a, b)).swapaxes(1, 2)
         return d
 
-    # compatible with Python 2.x
     def next(self):
+        """ compatible with Python 2.x. """
         return self.__next__()
+
+    def pos(self):
+        """ variant positions of the last retrival. """
+        return self.__pos__
+
+    def vid(self):
+        """ variant IDs of the last retrival. """
+        return self.__vid__
+
+    def sbj(self):
+        """ subject IDs. """
+        return self.__vgz__.samples
 
 
 class RndVsq:
@@ -80,7 +114,14 @@ class RndVsq:
     non-variants in between.
     """
 
-    def __init__(self, vgz, chm=None, bp0=None, bp1=None, wnd=1024, dsg='012'):
+    def __init__(self,
+                 vgz,
+                 chm=None,
+                 bp0=None,
+                 bp1=None,
+                 wnd=1024,
+                 dsg='012',
+                 dtp=int):
         """
         vgz: name of the bgzipped VCF file (*.vcf.gz), if None,
         only the reference genome will be returned.
@@ -102,7 +143,7 @@ class RndVsq:
         # the chromosome and its length
         chm = gv1.CHROM if chm is None else CKY[chm]
         cln = vgz.contigs[chm].length
-        self.CHR = chm
+        self.CHR = int(chm)
 
         # starting position
         if not bp0:
@@ -126,7 +167,10 @@ class RndVsq:
         self.__bp1__ = bp1
         self.__wnd__ = wnd
         self.__dsg__ = dsg
+        self.__dtp__ = dtp
         self.__mem__ = []
+        self.__pos__ = []
+        self.__vid__ = []
 
     def __next__(self):
         # locate one variant first, then fetch the surrounding region.
@@ -134,6 +178,10 @@ class RndVsq:
 
         # find variants in the sample window
         vz = self.__vgz__.fetch(self.__chm__, ps)
+
+        # variant position and ID
+        self.__pos__ = [None] * self.__wnd__
+        self.__vid__ = [None] * self.__wnd__
 
         sq = []
         while len(sq) < self.__wnd__:
@@ -154,6 +202,8 @@ class RndVsq:
             al = self.__dsg__[int(random() < af) + int(random() < af)]
 
             # update the nucleotide pointer
+            self.__pos__[len(sq)] = v.POS
+            self.__vid__[len(sq)] = v.ID
             sq.append(al)
 
         # pad the sequence if necessary
@@ -161,16 +211,28 @@ class RndVsq:
             sq.append('0' * (self.__wnd__ - len(sq)))
 
         # join the sequence
-        dt = ''.join(sq)
+        if self.__dtp__ is str:
+            dt = ''.join(sq)
+        else:
+            dt = np.array(sq, dtype='<i1')
         return dt
 
     # compatible with Python 2.x
     def next(self):
+        """ Compatable with Python 2.x """
         return self.__next__()
+
+    def pos(self):
+        """ variant positions of the last retrival. """
+        return self.__pos__
+
+    def vid(self):
+        """ variant IDs of the last retrival. """
+        return self.__vgz__
 
 
 def test1():
-    v = '../raw/ann/03.vcf.gz'
+    v = '../raw/wgs/03.vcf.gz'
     r = DsgVsq(v, chm=3 - 1, bp0=16050072)
     # r = VcfSeq(vgz, fsq, chm=22 - 1, bp0=16050650)
     return r

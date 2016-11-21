@@ -3,7 +3,6 @@ from vcf import Reader as vcfR
 from random import randint
 from random import random
 from gsq.dfs import CKY
-from pdb import set_trace
 
 
 class DsgSeq:

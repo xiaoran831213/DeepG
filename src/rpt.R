@@ -1,28 +1,35 @@
 library(ggplot2)
 
-readTraining <- function(fn)
+
+cat.rpt <- function(fr)
 {
-    h0 <- readLines(fn, 1)
-    h0 <- sub('^# ', '', h0)
-    h0 <- unlist(strsplit(h0, "\t"))
-    
-    d0 <- read.table(fn, col.names=h0)
+    fs <- dir(fr, '.rds$', full.name=T, all.files=T)
+    dt <- lapply(fs, readRDS)
+    dt <- do.call(rbind, dt)
+    dt
 }
 
-plot2T <- function(t1, t2)
+sum.rpt <- function(rp)
 {
-    g <- ggplot()
-    g <- g + geom_line(aes(x=log10(time), y=tcst), data=t1, color=1, linetype=1)
-    g <- g + geom_line(aes(x=log10(time), y=verr), data=t1, color=1, linetype=2)
-    g <- g + geom_line(aes(x=log10(time), y=tcst), data=t2, color=2, linetype=1)
-    g <- g + geom_line(aes(x=log10(time), y=verr), data=t2, color=2, linetype=2)
+    .power <- function(p)
+    {
+        sum(p < .05, na.rm=T) / sum(!is.na(p))
+    }
+    su <- aggregate(pvl ~ ssz + use + knl, data=rp, FUN=.power)
+    su
+}
+
+sum.plt <- function(su)
+{
+    g <- ggplot(su, aes(x=ssz, y=pvl))
+    g <- g + geom_line(aes(colour=knl, linetype=use))
     g
 }
 
-main <- function()
+main <- function(fr='sim/32')
 {
-    t1 <- readTraining('rpt/512_032_1sg.txt')
-    t2 <- readTraining('rpt/512_032_2sg.txt')
-
-    g0 <- plot2T(t1, t2)
+    dt <- cat.rpt(fr)
+    su <- sum.rpt(dt)
+    gp <- sum.plt(su)
+    list(d=dt, s=su, g=gp)
 }

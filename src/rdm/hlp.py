@@ -1,87 +1,52 @@
 import numpy as np
 import theano
 import theano.tensor as T
-
-
-def FX(fx=None):
-    if fx is None:
-        return theano.config.floatX
-    else:
-        theano.config.floatX = fx
-
-# by default use 32bit float
-FX('float32')
-
-# * -------- random number helpers -------- * #
-rs_np = None  # numpy random stream
-rs_tn = None  # theano random stream
-__seed__ = 120
-
-
-def set_seed(seed):
-    global rs_np, rs_tn, __seed__
-    rs_np = np.random.RandomState(seed)
-    rs_tn = theano.tensor.shared_randomstreams.RandomStreams(
-        rs_np.randint(2**30))
-    __seed__ = seed
-
-
-set_seed(None)
+from theano import config as cfg
+from copy import deepcopy as dp
 
 
 def S(v, name=None, dtype=None, strict=False):
-    """ create shared variable from v """
+    """ create shared variable from v
+    dtype: forced data type.
+    """
+    # return None as it is.
+    if v is None:
+        return v
+    
     if type(v) is T.sharedvar.TensorSharedVariable:
         return v
     # wrap python type to numpy type
     if not isinstance(v, np.ndarray):
         v = np.array(v, dtype)
+    if dtype and v.dtype != dtype:
+        v = v.astype(dtype)
 
-    # wrap numeric type to default theano configuration
-    if v.dtype == np.dtype('f8') and FX() is 'float32':
-        v = np.asarray(v, dtype='f4')
-
-    # if v.dtype is np.dtype('i8') and FX() is 'float32':
-    #     v = np.asarray(v, dtype = 'i4')
-
-    # if v.dtype is np.dtype('u8') and FX() is 'float32':
-    #     v = np.asarray(v, dtype = 'u4')
+    # use float 32 if necessary
+    if dtype is None and v.dtype == 'f8':
+        v = v.astype(cfg.floatX)
 
     # broadcasting pattern
     b = tuple(s == 1 for s in v.shape)
 
-    return theano.shared(v, name=name, strict=strict, broadcastable=b)
+    return theano.shared(v, name, strict=strict, broadcastable=b)
 
 
-def shared_acc(shared_var, doc=None):
-    """ build getter and setter for a shared variable """
+# tensor contant creator
+def C(v, name=None, dtype=None, strict=False):
+    """ creat constant from v. """
+    if type(v) is T.TensorConstant:
+        v = v.data
+        
+    if not isinstance(v, np.ndarray):
+        v = np.array(v, dtype)
 
-    def acc(v=None):
-        if v is None:  # getter
-            return shared_var.get_value()
-        else:  # setter
-            # wrap python type to numpy type
-            if not isinstance(v, np.ndarray):
-                v = np.array(v)
+    if dtype is None and v.dtype == 'f8':
+        v = v.astype(cfg.floatX)
 
-            # wrap numeric type to default theano configuration
-            if v.dtype is np.dtype('f8') and FX() is 'float32':
-                v = np.asarray(v, dtype='f4')
-            if v.dtype is np.dtype('i8') and FX() is 'float32':
-                v = np.asarray(v, dtype='i4')
-            if v.dtype is np.dtype('u8') and FX() is 'float32':
-                v = np.asarray(v, dtype='u4')
-            shared_var.set_value(v)
+    # name
+    name = str(v) if name is None else name
 
-    # return the wrapped getter/setter
-    acc.__doc__ = 'access {}.'.format(repr(shared_var)) if doc is None else doc
-    return acc
-
-
-# rescaled values to [0, 1]
-def rescale01(x, axis=None):
-    """ rescale to [0, 1] """
-    return (x - x.min(axis)) / (x.max(axis) - x.min(axis))
+    return T.constant(v, name, v.ndim)
 
 
 # type checkers
@@ -92,7 +57,13 @@ def is_tvar(x):
 
 def is_tshr(x):
     """ is x a theano shared variable """
-    return type(x) is T.sharedvar.TensorSharedVariable
+    if type(x) is T.sharedvar.TensorSharedVariable:
+        return True
+    if not cfg.device.startswith('gpu'):
+        return False
+    if type(x) is theano.sandbox.cuda.var.CudaNdarraySharedVariable:
+        return True
+    return False
 
 
 def is_tcns(x):
@@ -127,16 +98,88 @@ def parms(y, chk=None):
 
     return list(d.keys())
 
-# def save_pgz(fo, s):
-#     """ save python object to gziped pickle """
-#     import gzip
-#     import cPickle
-#     with gzip.open(fo, 'wb') as gz:
-#         cPickle.dump(s, gz, cPickle.HIGHEST_PROTOCOL)
 
-# def load_pgz(fi):
-#     """ load python object from gziped pickle """
-#     import gzip
-#     import cPickle
-#     with gzip.open(fi, 'rb') as gz:
-#         return cPickle.load(gz)
+def wrg(nnt):
+    """ deeply search the weight parameters of the network."""
+    stk, ret = [nnt], []
+    while stk:
+        s = stk.pop()
+        ret.extend(s.__wreg__())
+        stk.extend(s)
+    return ret
+
+
+def par(src):
+    """ deeply search the parameters of the source network."""
+    stk, ret = [src], []
+    while stk:
+        # pop up the networks at the top
+        s = stk.pop()
+
+        # search for parameters
+        ret.extend(s.__parm__().viewvalues())
+
+        # push in child networks
+        stk.extend(s)
+
+    # return the collection
+    return ret
+
+
+def paint(src, tgt=None):
+    """ paint the parameters values of a source onto the target network.
+    If the target is None, a new network is automatically instantiated,
+    otherwise the call must be sure the two are homogenuous.
+
+    src, tgt: source and target networks.
+    """
+
+    if tgt is None:
+        return dp(src)
+    
+    # the stack to hold recursive networks
+    stk = [(src, tgt)]
+    while len(stk) > 0:
+        # pop up the networks at the top
+        s, d = stk.pop()
+
+        # do a shallow painting
+        s.__pcpy__(d)
+
+        # push in child networks
+        stk.extend(zip(s, d))
+
+    # dummy return
+    return tgt
+
+
+def dhom(src, tgt):
+    """ deeply test if the source network is topologically homogeneous
+    to the target network.
+
+    src, tgt: source and target networks.
+    """
+
+    # the stack to hold recursive networks
+    stk = [(src, tgt)]
+    while len(stk) > 0:
+        # pop up the networks at the top
+        s, t = stk.pop()
+
+        # homogeneity test:
+        if not s.__homo__(t):
+            return False
+
+        # push in child networks
+        stk.extend(zip(s, t))
+
+    # source and target are deeply homogenuous.
+    return True
+
+
+def test():
+    from sae import SAE
+    dm = [100, 200, 300]
+    sa1 = SAE.from_dim(dm)
+    sa2 = SAE.from_dim(dm)
+    return sa1, sa2

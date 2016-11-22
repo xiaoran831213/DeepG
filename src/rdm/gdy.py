@@ -2,12 +2,14 @@
 import numpy as np
 import os
 from os import path as pt
+import sys
 try:
-    from trainer import Trainer
+    sys.path.extend(['..'] if '..' not in sys.path else [])
+    from trainer import Trainer as Tnr
     from hlp import S
     from sae import SAE
 except ValueError:
-    from .trainer import Trainer
+    from .trainer import Trainer as Tnr
     from .hlp import S
     from .sae import SAE
 from xutl import spz, lpz
@@ -35,11 +37,12 @@ def gdy_sae(nnt, __x, nep=20, npt=1, **kwd):
         for i, a in enumerate(nnt.sa):
             # the trainer
             if ptn[i] is None:
-                ptn[i] = Trainer(a, x=x_i, u=x_i)
+                ptn[i] = Tnr(a, x=x_i, u=x_i, inc=1.03, dec=.85)
             if x_i is not None:
                 ptn[i].x.set_value(x_i)
+                ptn[i].lrt_inc.set_value(1.02)
 
-            ptn[i].tune(1)
+            ptn[i].tune(nep)
 
             # wire the data to the bottom of the tuple, the output
             # on top is the training material for next layer
@@ -76,7 +79,7 @@ def main(**kwd):
 
 
 # for testing purpose
-def rdat(fdr='../../raw/H08', seed=None):
+def rdat(fdr='../../wgs/W08/W08/00_GNO', seed=None):
     # pick data file
     np.random.seed(seed)
     fnm = np.random.choice(os.listdir(fdr))
@@ -93,7 +96,7 @@ def rdat(fdr='../../raw/H08', seed=None):
     dim = __x.shape[-1]
     dim = [dim] + [int(dim/2**_) for _ in range(-2, 32) if 2**_ <= dim]
     nnt = SAE.from_dim(dim)
-    nnt[-1].shp = S(1.0, 'Shp')
+    # nnt[-1].shp = S(1.0, 'Shp')
 
     dat = {'__x': __x, 'nnt': nnt, 'gmx': gmx}
     return dat

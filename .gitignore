@@ -91,6 +91,7 @@ ENV/
 # raw data, and intermediate data
 raw
 dat
+wgs
 
 # backups
 *~

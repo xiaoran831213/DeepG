@@ -3,7 +3,9 @@ import numpy as np
 from collections import OrderedDict as OD
 from itertools import product
 from copy import deepcopy as DC
+import sys
 try:
+    sys.path.extend(['..'] if '..' not in sys.path else [])
     from trainer import Trainer as Tnr
     from sae import SAE
     import hlp
@@ -11,7 +13,6 @@ except ValueError:
     from .trainer import Trainer as Tnr
     from .sae import SAE
     from . import hlp
-import sys
 import os
 from xutl import spz, lpz
 

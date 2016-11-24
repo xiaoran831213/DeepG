@@ -1,10 +1,9 @@
 import numpy as np
-from utl import spgz
+from gsq.vsq import DsgVsq
 
 
 def getd(m=256, f='../raw/wgs/03.vcf.gz', d='012'):
     """ get dosage data """
-    from gsq.vsq import DsgVsq
     from random import randint
     pos = randint(0, 10000000)
 
@@ -18,18 +17,42 @@ def getd(m=256, f='../raw/wgs/03.vcf.gz', d='012'):
     bno = np.ndarray((3, dat.shape[0], dat.shape[1]), dtype='f4')
     for i in np.arange(3):
         bno[i, ] = dat == i
-    
+
     return dat, prb, bno
 
 
-def gend():
-    d, p, b = getd(m=256)
-    d1, d5 = d[..., :1750, :], d[..., 1750:, :]
-    p1, p5 = p[..., :1750, :], p[..., 1750:, :]
-    b1, b5 = b[..., :1750, :], b[..., 1750:, :]
-    spgz('../dat/d1.pgz', d1)
-    spgz('../dat/d5.pgz', d5)
-    spgz('../dat/p1.pgz', p1)
-    spgz('../dat/p5.pgz', p5)
-    spgz('../dat/b1.pgz', b1)
-    spgz('../dat/b5.pgz', b5)
+def rseq(wnd=256, dir='haf', sav=None, seed=None):
+    """
+    load sequence from a randomly drawn segment in the genome.
+   
+    wnd: the sampling windown size
+    sav: where to save the samples
+    """
+    if seed:
+        np.random.seed(seed)
+
+    # draw genomic data
+    chr = np.random.randint(22) + 1
+    vcf = '{}/{:02d}.vcf.gz'.format(dir, chr)
+    bp0 = np.random.randint(2^31)
+
+    itr = DsgVsq(vcf, bp0=bp0, wnd=wnd, dsg=None)
+
+    # genomic matrix
+    gmx = next(itr)
+
+    # subjects
+    sbj = np.array(itr.sbj(), dtype='S16')
+
+    # genomic map
+    gmp = np.ndarray(
+        wnd,
+        dtype=np.dtype([('CHR', '<i1'), ('POS', '<i4'), ('UID', 'S32')]))
+    gmp['CHR'] = itr.CHR
+    gmp['POS'] = itr.pos()
+    gmp['UID'] = itr.vid()
+
+    # save and return
+    if sav:
+        np.savez_compressed(sav, gmx=gmx, gmp=gmp, sbj=sbj)
+    return gmx, gmp, sbj

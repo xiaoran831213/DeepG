@@ -3,6 +3,7 @@ import numpy as np
 import os
 import sys
 from os import path as pt
+import sys
 from xutl import spz, lpz
 from trainer import Trainer as Tnr
 from sae import SAE
@@ -34,8 +35,9 @@ def gdy_sae(nnt, __x, nep=1, npt=20, **kwd):
                 ptn[i] = Tnr(a, x=x_i, u=x_i)
             if x_i is not None:
                 ptn[i].x.set_value(x_i)
+                ptn[i].lrt_inc.set_value(1.02)
 
-            ptn[i].tune(1)
+            ptn[i].tune(nep)
 
             # wire the data to the bottom of the tuple, the output
             # on top is the training material for next layer

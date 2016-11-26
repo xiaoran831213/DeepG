@@ -3,14 +3,13 @@ import numpy as np
 import os
 import sys
 from os import path as pt
-import sys
 from xutl import spz, lpz
 from trainer import Trainer as Tnr
 from sae import SAE
 sys.path.extend(['..'] if '..' not in sys.path else [])
 
 
-def gdy_sae(nnt, __x, nep=1, npt=20, **kwd):
+def gdy_sae(nnt, __x, nep=1, npt=50, **kwd):
     """ layer-wise unsupervised pre-training for
     stacked autoencoder.
     nnt: the stacked autoencoders
@@ -61,7 +60,11 @@ def main(fnm, **kwd):
 
     # load training data
     if kwd.get('__x') is None:
-        gmx = np.load(fnm)['gmx'].astype('f')
+        dat = np.load(fnm)
+        kwd.update(dat)
+
+        # fix data type
+        gmx = dat['gmx'].astype('f')
         # fix MAF > .5
         __i = np.where(gmx.sum((0, 1)) > gmx.shape[0])[0]
         gmx[:, :, __i] = 1 - gmx[:, :, __i]

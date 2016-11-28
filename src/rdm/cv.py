@@ -15,7 +15,6 @@ except ValueError:
     from . import hlp
 import os
 from xutl import spz, lpz
-
 from pdb import set_trace
 
 
@@ -145,7 +144,7 @@ def cv_sae_lyr_one(nnt, __x, k=4, **kwd):
 
 
 # for testing purpose
-def rdat(fdr='../../raw/H08_20', seed=None):
+def rdat(fdr='../../raw/W08/00_GNO', seed=None):
     # pick data file
     np.random.seed(seed)
     fnm = np.random.choice(os.listdir(fdr))
@@ -163,7 +162,7 @@ def rdat(fdr='../../raw/H08_20', seed=None):
     
     # dm8 = [dim, dim * 8, dim * 4]
     # dm4 = [dim, dim * 4, dim * 2]
-    dm2 = [dim, dim * 2]
+    dm2 = [dim, int(dim / 4)]
     # dm1 = [dim, dim, dim]
     # nt8 = SAE.from_dim(dm8)
     # nt4 = SAE.from_dim(dm4)
@@ -192,4 +191,3 @@ def tst2():
     t2 = Tnr(hlp.paint(n), x, inc=1.00, dec=1.00)
     t2.__onep__ = None
     return t1, t2
-    

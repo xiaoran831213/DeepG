@@ -3,74 +3,14 @@ import theano
 from theano import tensor as T
 from theano import function as F
 import sys
-try:
-    sys.path.extend(['..'] if '..' not in sys.path else [])
-    from hlp import S, C, parms, paint
-except ValueError as e:
-    from hlp import S, C, parms, paint
-
+from hlp import S, C, parms, paint
 from time import time as tm
-import sys
 from matplotlib import pyplot as plt
+import exb
 from pdb import set_trace
+
+sys.path.extend(['..'] if '..' not in sys.path else [])
 FX = theano.config.floatX
-
-
-def __err_CE__(y, z):
-    """ symbolic expression of cross entrophy
-    y: produced output
-    z: expected output
-
-    The first dimension denote unit of sampling
-    """
-    return -(z * T.log(y) + (1 - z) * T.log(1 - y))
-
-
-def __err_L2__(y, z):
-    """ symbolic expression of __err_L2__ norm
-    y: produced output
-    z: expected output
-
-    The first dimension denote unit of sampling
-    """
-    return T.sqrt((y - z)**2)
-
-
-def __err_L1__(y, z):
-    """ symbolic expression of __err_L1__ norm
-    y: produced output
-    z: expected output
-
-    The first dimension of y, z denote the batch size.
-    """
-    return abs(y - z)
-
-__errs__ = {
-    None: __err_CE__,
-    'CE': __err_CE__,
-    'L1': __err_L1__,
-    'L2': __err_L2__}
-
-
-def __reg_L0__(x, thd=1e-06):
-    """ build expression of L0 norm given a vector. """
-    return T.sum((T.abs_(x) > thd), dtype=FX)
-
-
-def __reg_L1__(x):
-    """ build expression of __err_L1__ norm given a vector. """
-    return T.sum(T.abs_(x))
-
-
-def __reg_L2__(x):
-    """ build expression of __err_L2__ norm given a vector. """
-    return T.sqrt(T.sum(x**2))
-
-__regs__ = {
-    None: __reg_L1__,
-    'L0': __reg_L0__,
-    'L1': __reg_L1__,
-    'L2': __reg_L2__}
 
 
 class Trainer(object):
@@ -124,10 +64,10 @@ class Trainer(object):
         self.__seed__ = seed
         self.__nrng__ = nrng
         self.__trng__ = trng
-        
+
         # expression of error and regulator terms
-        err = __errs__[kwd.get('err')]
-        reg = __regs__[kwd.get('reg')]
+        err = getattr(exb, kwd.get('err', 'CE'))
+        reg = getattr(exb, kwd.get('reg', 'L1'))
 
         # the validation disruption
         self.vdr = S(kwd.get('vdr'), 'VDR')
@@ -149,7 +89,7 @@ class Trainer(object):
         # learning rate
         lrt = kwd.get('lrt', .01)
         lrt_inc = kwd.get('inc', 1.04)
-        lrt_dec = kwd.get('dec', 0.5)
+        lrt_dec = kwd.get('dec', 0.85)
         self.lrt = S(lrt, 'LRT')
         self.lrt_inc = S(lrt_inc, 'LRT_INC')
         self.lrt_dec = S(lrt_dec, 'LRT_DEC')
@@ -161,8 +101,7 @@ class Trainer(object):
         # the neural network
         self.nnt = nnt
         self.dim = (nnt.dim[0], nnt.dim[-1])
-
-        # superium of gradient
+        # supremum of gradient
         self.gsup = S(.0)
 
         # inputs and labels, for modeling and validation
@@ -176,21 +115,31 @@ class Trainer(object):
         # 1) symbolic expressions
         x = T.tensor(name='x', dtype=x.dtype, broadcastable=x.broadcastable)
         z = T.tensor(name='z', dtype=z.dtype, broadcastable=z.broadcastable)
-        y = nnt(x)  # the symbolic batch output
+        y = nnt(x)  # expression of predicted output
 
-        # list of independant symbolic parameters to be tuned
+        # list of symbolic parameters to be tuned
         pars = parms(y)  # parameters
 
         # list of  symbolic weights to apply decay
-        wgts = [p for p in pars if p.name == 'w']         # weights
-        vwgt = T.concatenate([w.flatten() for w in wgts])  # vecter
+        vwgt = T.concatenate([p.flatten() for p in pars if p.name == 'w'])
 
-        # symbolic batch cost
-        # Mean erro of observations indexed by the second last subscript
-        erro = err(y, z).sum(-1).mean()
-        wsum = reg(vwgt)  # weight sum
+        # symbolic batch cost, which is the mean trainning erro over all
+        # observations and sub attributes.
+
+        # The observations are indexed by the first dimension of y and z, while
+        # the sub attributes are indexed by the rest but not last dimensions.
+
+        # The last dimension indices data points for each observation, examples
+        # are voxels in an MRI volume, and SNPs in a genome segment.
+        # Values of these data points are aggregated by the objective function,
+        # err,  which can be L1, L2 norm and CE. the objective function return
+        # an scalar ratting of the training loss.
+        erro = err(y, z).mean()
+
+        # the sum of weights calculated for weight decay.
+        wsum = reg(vwgt)
         cost = erro + wsum * self.lmd
-        self.__cost__ = cost
+        l2er = exb.L2(y, z).mean()
 
         # symbolic gradient of cost WRT parameters
         grad = T.grad(cost, pars)
@@ -199,7 +148,7 @@ class Trainer(object):
 
         # trainer control
         nwep = ((self.bt + 1) * self.bsz) // self.x.shape[-2]  # new epoch?
-        
+
         # 2) define updates after each batch training
         up = []
 
@@ -221,7 +170,7 @@ class Trainer(object):
         up.append((self.ep, self.ep + nwep))
 
         # 3) the trainer functions
-        # feed symbols with actual data in batches
+        # expression of batch and whole data feed:
         _ = T.arange((self.bt + 0) * self.bsz, (self.bt + 1) * self.bsz)
         bts = {x: self.x.take(_, -2, 'wrap'), z: self.z.take(_, -2, 'wrap')}
         dts = {x: self.x, z: self.z}
@@ -236,7 +185,9 @@ class Trainer(object):
 
         # weights, and parameters
         self.wsum = F([], wsum, name="wsum")
-        self.gsup = F([], gsup, name="gsup", givens=bts)
+        self.gsup = F([], gsup, name="gsup", givens=dts)
+
+        self.l2er = F([], l2er, name="l2er", givens=dts)
         # * -------- done with trainer functions -------- *
 
         # * -------- validation functions -------- *
@@ -272,7 +223,7 @@ class Trainer(object):
         # printing format
         self.__pfmt__ = (
             '{ep:04d}.{bt:03d}: {tcst:.2f} = {terr:.2f} + {lmd:.2e}*{wsum:.1f}'
-            '|{verr:.2f}, {gsup:.2e}, {lrt:.2e}')
+            '|{verr:.2f}, {l2er:.2f}|, {gsup:.2e}, {lrt:.2e}')
 
     # -------- helper funtions -------- *
     def nsbj(self):
@@ -285,6 +236,8 @@ class Trainer(object):
         """
         Predicted outcome given input {x}. By default, use the training samples
         as input.
+        x: network input
+        evl: evaludate the expression (default = True)
         """
         y = self.nnt(self.x if x is None else x)
         return y.eval() if evl else y
@@ -299,24 +252,27 @@ class Trainer(object):
         """ called on new epoch. """
         # history records
         h = self.__hist__
-        
+
         # update the learning rate and suprimum of gradient
-        # if h[-1]['gsup'] < self.__gsup__:  # accelerate
-        #     self.lrt.set_value(self.lrt.get_value() * self.lrt_inc.get_value())
-        #     paint(self.nnt, self.__nnt0__)
-        #     self.__gsup__ = h[-1]['gsup']
-        # else:                   # slow down
-        #     self.lrt.set_value(self.lrt.get_value() * self.lrt_dec.get_value())
-        #     paint(self.__nnt0__, self.nnt)
         if h[-1]['terr'] < self.__einf__:  # accelerate
             self.lrt.set_value(self.lrt.get_value() * self.lrt_inc.get_value())
             paint(self.nnt, self.__nnt0__)
             self.__einf__ = h[-1]['terr']
-        else:                   # slow down
+        else:  # slow down
             self.lrt.set_value(self.lrt.get_value() * self.lrt_dec.get_value())
             paint(self.__nnt0__, self.nnt)
-        
 
+    def __stop__(self):
+        """ return true should the training be stopped. """
+        h = self.__hist__
+        if round(h[-1]['terr'], 2) < 10**-2:
+            return True
+        if round(h[-1]['gsup'], 5) < 10**-5:
+            return True
+        if round(h[-1]['lrt'], 9) < 10**-9:
+            return True
+        return False
+   
     def tune(self, nep=1, nbt=0, rec=0, prt=0):
         """ tune the parameters by running the trainer {nep} epoch.
         nep: number of epoches to go through
@@ -329,13 +285,13 @@ class Trainer(object):
         prt: frequency of printing.
         """
         bt = self.bt
-        b0 = bt.eval().item()   # starting batch
-        ei, bi = 0, 0           # counted epochs and batches
+        b0 = bt.eval().item()  # starting batch
+        ei, bi = 0, 0  # counted epochs and batches
 
         nep = nep + nbt // self.nbat()
         nbt = nbt % self.nbat()
 
-        while ei < nep or bi < nbt:
+        while (ei < nep or bi < nbt) and not self.__stop__():
             # send one batch for training
             t0 = tm()
             self.step()
@@ -362,6 +318,7 @@ class Trainer(object):
                 if prt == 0:  # print
                     self.cout()
 
+                # adjustment at the end of each epoch
                 if self.__onep__:
                     self.__onep__()
 

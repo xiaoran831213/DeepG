@@ -51,14 +51,14 @@ def main(fnm='../../raw/W08/10_PTN', **kwd):
     """
     # randomly pick pre-training progress if {fnm} is a directory and no record
     # exists in the saved progress:
-    if isinstance(fnm, str):
-        if pt.isdir(fnm):
-            fnm = pt.join(fnm, np.random.choice(os.listdir(fnm)))
-        kwd.update(fnm=fnm)
-    else:
-        fnm = kwd['fnm']
+    if pt.isdir(fnm):
+        fnm = pt.join(fnm, np.random.choice(os.listdir(fnm)))
+    kwd.update(fnm=fnm)
 
+    # load data from {fnm}
     fdt = lpz(fnm)
+
+    # parameters in {kwd} takes precedence over those loaded from {fnm}
     fdt.update(kwd)
     kwd = fdt
 
@@ -67,26 +67,24 @@ def main(fnm='../../raw/W08/10_PTN', **kwd):
     ovr = kwd.pop('ovr', 0)
     if sav and pt.exists(sav + '.pgz'):
         print(sav, ": exists,", )
-        sdt = lpz(sav)
         if ovr is 0 or ovr > 2:  # do not overwrite the progress
             print(" skipped.")
-            return sdt
-        else:
-            sdt.update(kwd)
-            kwd = sdt
+            return kwd
 
-        # continue with the progress, but allow new or additional training data
-        # (e.g. for validation).
+        # parameters in {kwd} take precedence over those from {sav}.
+        sdt = lpz(sav)
+        sdt.update(kwd)
+        kwd = sdt
+
+        # continue with the progress
         if ovr is 1:
-            kwd['__x'] = fdt['__x'] if '__x' in fdt else kwd['__x']
             print("continue training.")
 
-        # restart the fine-tuning, try to reuse saved training data.
+        # restart the fine-tuning, reset the network.
         if ovr is 2:
             print("restart training.")
-            del kwd['nnt']
+            kwd['nnt'] = fdt['nnt']
 
-    # do the fine-tuning:
     kwd = ftn_sae(**kwd)        # <-- __x, nnt, npt, ptn, ...
 
     # save the progress

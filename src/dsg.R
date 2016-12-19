@@ -1,1 +1,0 @@
-/mnt/home/tongxia1/study/gno/src/dsg.R

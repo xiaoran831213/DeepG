@@ -8,7 +8,7 @@ from xutl import spz, lpz
 sys.path.extend(['..'] if '..' not in sys.path else [])
 
 
-def ftn_sae(nnt, __x, nft=None, ae0=None, ae1=None, **kwd):
+def ftn_sae(nnt, __x, __u=None, nft=None, ae0=None, ae1=None, **kwd):
     """ layer-wise unsupervised pre-training for
     stacked autoencoder.
     nnt: the stacked autoencoders
@@ -30,7 +30,8 @@ def ftn_sae(nnt, __x, nft=None, ae0=None, ae1=None, **kwd):
     if ftn is None:
         n = nnt.sub(ae1, ae0) if ae0 or ae1 else nnt
         x = nnt.sub(ae0, 0).ec(__x).eval() if ae0 else __x
-        ftn = Tnr(n, x, **kwd)
+        u = nnt.sub(ae0, 0).ec(__u).eval() if ae0 else __u
+        ftn = Tnr(n, x, u=u, **kwd)
 
     # fine-tune
     nft = 20 if nft is None else nft

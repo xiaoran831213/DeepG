@@ -4,18 +4,25 @@ from collections import OrderedDict as OD
 from itertools import product
 from copy import deepcopy as DC
 import sys
-try:
-    sys.path.extend(['..'] if '..' not in sys.path else [])
-    from trainer import Trainer as Tnr
-    from sae import SAE
-    import hlp
-except ValueError:
-    from .trainer import Trainer as Tnr
-    from .sae import SAE
-    from . import hlp
+from tnr.cmn import CmnTnr
+from tnr.snap import Snap
+from sae import SAE
+import hlp
 import os
 from xutl import spz, lpz
 from pdb import set_trace
+
+sys.path.extend(['..'] if '..' not in sys.path else [])
+
+
+class Tnr(CmnTnr, Snap):
+    """ Combined Trainer class. """
+    def __init__(self, *arg, **kwd):
+        """
+        Constructor.
+        """
+        self.__snap__ = {}      # map of snap shots
+        super(Tnr, self).__init__(*arg, **kwd)
 
 
 # the default lambda grid, with Ne-M format
@@ -138,15 +145,14 @@ def cv_sae_lmd_all(lmt=20, lbk=20, **p):
     return p
 
 
-# depth of SAE
-def cv_sae_lyr_one(nnt, __x, k=4, **kwd):
+# number of hidden units in total
+def cv_sae_hdu(nnt, __x, k=4, **kwd):
     pass
 
 
 # for testing purpose
-def rdat(fdr='../../raw/W08/00_GNO', seed=None):
+def rdat(fdr='../../raw/W08/00_GNO'):
     # pick data file
-    np.random.seed(seed)
     fnm = np.random.choice(os.listdir(fdr))
     dat = np.load(os.path.join(fdr, fnm))
     gmx = dat['gmx'].astype('f')
@@ -154,40 +160,17 @@ def rdat(fdr='../../raw/W08/00_GNO', seed=None):
     # fix MAF > .5
     __i = np.where(gmx.sum((0, 1)) > gmx.shape[0])[0]
     gmx[:, :, __i] = 1 - gmx[:, :, __i]
-    __x = gmx.reshape(gmx.shape[0], -1)
+    __x = gmx.reshape(gmx.shape[0], -1)[:1750]
+    __u = gmx.reshape(gmx.shape[0], -1)[1750:]
 
-    # set up neral network
-    # from exb import Ods
-    dim = __x.shape[-1]
-    
-    # dm8 = [dim, dim * 8, dim * 4]
-    # dm4 = [dim, dim * 4, dim * 2]
-    dm2 = [dim, int(dim / 4)]
-    # dm1 = [dim, dim, dim]
-    # nt8 = SAE.from_dim(dm8)
-    # nt4 = SAE.from_dim(dm4)
-    nt2 = SAE.from_dim(dm2)
-    # nt1 = SAE.from_dim(dm1)
-    # nnt[-1].shp = S(1.0, 'Shp')
-
-    # dat = {'__x': __x, 'nt8': nt8, 'nt4': nt4, 'nt2': nt2}
-    return {'__x': __x, 'nnt': nt2}
+    return {'__x': __x, '__u': __u}
 
 
 def main():
     d = rdat()
-    x, n = d['__x'], d['nnt']
-    t1 = Tnr(hlp.paint(n), x, inc=1.04, dec=0.85)
-    t2 = Tnr(hlp.paint(n), x, inc=1.00, dec=1.00)
-    t2.__onep__ = None
-    return t1, t2
-
-
-def tst2():
-    """ train the second layer of SAE."""
-    x = lpz('../../dat/h0.pz')
-    n = SAE.from_dim([x.shape[-1], x.shape[-1]/2])
-    t1 = Tnr(hlp.paint(n), x, inc=1.04, dec=0.85)
-    t2 = Tnr(hlp.paint(n), x, inc=1.00, dec=1.00)
-    t2.__onep__ = None
-    return t1, t2
+    x, u = d['__x'], d['__u']
+    t, d = [], x.shape[-1] * 8
+    for i in range(0, 10):
+        t.append(Tnr(SAE.from_dim([x.shape[-1], d]), x, u=u))
+        d = d/2
+    return t

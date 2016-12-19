@@ -1,52 +1,54 @@
 import os
-from os import listdir as ls
 import os.path as pt
 from os.path import join as pj
 
 import numpy as np
-from rdm.trainer import Trainer
 from rdm.gdy import gdy_sae
+from rdm.ftn import ftn_sae
 from rdm.sae import SAE
-from rdm.hlp import S
 
 
-def main(f='raw/W08/00_GNO', out=None, **kwd):
+def main(fdr='../raw/W08/00_GNO', out=None, **kwd):
     """ adaptive training for one autoendocer. """
-    dat = kwd.get('dat', np.load(pj(f, np.random.choice(ls(f)))))
-    gmx, sbj = dat['gmx'], dat['sbj']
+    nnt = kwd.get('nnt')
+    if nnt is None:
+        fnm = np.random.choice(os.listdir(fdr))
+        dat = np.load(pj(fdr, fnm))
+        gmx, sbj = dat['gmx'], dat['sbj']
 
-    # shuffle the observations
-    idx = np.random.permutation(gmx.shape[0])
-    gmx = gmx[idx, ]
-    sbj = sbj[idx]
+        # shuffle the observations
+        idx = np.random.permutation(gmx.shape[0])
+        gmx = gmx[idx, ]
+        sbj = sbj[idx]
 
-    # select untyped variants
-    idx = np.random.binomial(1, .05, gmx.shape[-1])
-    umx = gmx[:, :, idx == 1]
-    gmx = gmx[:, :, idx == 0]
+        # select untyped variants
+        idx = np.random.binomial(1, .05, gmx.shape[-1])
+        umx = gmx[:, :, idx == 1]
+        gmx = gmx[:, :, idx == 0]
 
-    # other genotype formats
-    usg = umx.sum(-2, dtype='<i4')
-    dsg = gmx.sum(-2, dtype='<i4')
+        # other genotype formats
+        usg = umx.sum(-2, dtype='<i4')
+        dsg = gmx.sum(-2, dtype='<i4')
 
     # training and validation data
-    __x = kwd.get('__x', gmx.reshape(gmx.shape[0], -1).astype('f'))
+    __x = kwd.get('__x', gmx.reshape(gmx.shape[0], -1).astype('f')[:1750])
+    __u = kwd.get('__x', gmx.reshape(gmx.shape[0], -1).astype('f')[1750:])
+    kwd.update(__x=__x, __u=__u)
 
     dim = __x.shape[-1]
-    dim = [dim] + [int(dim/2**_) for _ in range(-2, 5) if 2**_ <= dim]
+    # dim = [dim] + [int(dim/2**_) for _ in range(-2, 5) if 2**_ <= dim]
+    dim = [dim] + [30]
 
+    # nnt[-1].shp = S(1.0, 'Shp', 'f')
     nnt = kwd.pop('nnt', SAE.from_dim(dim))
-    nnt[-1].shp = S(1.0, 'Shp', 'f')
+    kwd.update(nnt=nnt)
 
     # pre-train and fine-tune
-    npt = kwd.pop('npt', 20)
-    ptn = gdy_sae(nnt, __x, npt, **kwd)['ptn']
-    kwd.update(npt=0, ptn=ptn)
-
-    ftn = kwd.get('ftn', Trainer(nnt=nnt, x=__x, lrt=.001, **kwd))
-    nft = kwd.get('nft', 80)
-    ftn.tune(nft)
-    kwd.update(nft=nft, ftn=ftn, nnt=nnt)
+    # kwd.update(npt=10)
+    # kwd = gdy_sae(**kwd)
+    # kwd.update(npt=0, nft=2000)
+    kwd.update(nft=5000)
+    kwd = ftn_sae(**kwd)
 
     # request output:
     if out:
@@ -63,11 +65,12 @@ def main(f='raw/W08/00_GNO', out=None, **kwd):
         np.savetxt(pj(tpd, 'usg.txt'), usg, '%d')
 
         # high-order features
-        np.savetxt(pj(tpd, 'hof.txt'), nnt.ec(__x).eval(), '%.8f')
+        _ = np.vstack([__x, __u])
+        np.savetxt(pj(tpd, 'hof.txt'), nnt.ec(_).eval(), '%.8f')
 
         # meta information
         inf = open(pt.join(tpd, 'inf.txt'), 'w')
-        for k, v in ftn.__hist__[-1].items():
+        for k, v in kwd['ftn'].__hist__[-1].items():
             inf.write('{}={}\n'.format(k, v))
         inf.close()
 

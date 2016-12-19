@@ -1,4 +1,5 @@
 # fine-tuner for neural networks
+
 import numpy as np
 import os
 import sys
@@ -8,7 +9,7 @@ from xutl import spz, lpz
 sys.path.extend(['..'] if '..' not in sys.path else [])
 
 
-def ftn_sae(nnt, __x, nft=None, ae0=None, ae1=None, **kwd):
+def ftn_sae(nnt, __x, __u=None, nft=None, ae0=None, ae1=None, **kwd):
     """ layer-wise unsupervised pre-training for
     stacked autoencoder.
     nnt: the stacked autoencoders
@@ -24,24 +25,27 @@ def ftn_sae(nnt, __x, nft=None, ae0=None, ae1=None, **kwd):
     kwd: additional key words to pass on to the trainer.
     """
     # from hlp import dhom
-    
+
     # build the trainer of fine-tuning:
     ftn = kwd.get('ftn', None)
     if ftn is None:
         n = nnt.sub(ae1, ae0) if ae0 or ae1 else nnt
         x = nnt.sub(ae0, 0).ec(__x).eval() if ae0 else __x
-        ftn = Tnr(n, x, **kwd)
+        u = nnt.sub(ae0, 0).ec(__u).eval() if ae0 and __u else __u
+        ftn = Tnr(n, x, u=u, **kwd)
 
     # fine-tune
     nft = 20 if nft is None else nft
     ftn.tune(nft)
 
-    kwd.update(ftn=ftn, nnt=nnt, __x=__x, nft=nft, ae0=ae0, ae1=ae1)
+    kwd.update(
+        ftn=ftn, nnt=nnt, __x=__x, nft=nft, ae0=ae0, ae1=ae1,
+        lrt=ftn.lrt.get_value())
     kwd = dict((k, v) for k, v in kwd.iteritems() if v is not None)
     return kwd
 
 
-def main(fnm='../../raw/W08/10_PTN', **kwd):
+def main(fnm='../../sim/W08/10_PTN', **kwd):
     """ the main fine-tune procedure, currently it only supports the Stacked
     Autoencoders(SAEs).
 
@@ -55,12 +59,10 @@ def main(fnm='../../raw/W08/10_PTN', **kwd):
         fnm = pt.join(fnm, np.random.choice(os.listdir(fnm)))
     kwd.update(fnm=fnm)
 
-    # load data from {fnm}
-    fdt = lpz(fnm)
-
-    # parameters in {kwd} takes precedence over those loaded from {fnm}
-    fdt.update(kwd)
-    kwd = fdt
+    # load data from {fnm}, but let parameters in {kwd} takes precedence over
+    # those in {fnm}
+    _ = kwd.keys()
+    kwd.update((k, v) for k, v in lpz(fnm).iteritems() if k not in _)
 
     # check saved progress and overwrite options:
     sav = kwd.get('sav', pt.basename(fnm).split('.')[0])
@@ -71,21 +73,22 @@ def main(fnm='../../raw/W08/10_PTN', **kwd):
             print(" skipped.")
             return kwd
 
-        # parameters in {kwd} take precedence over those from {sav}.
-        sdt = lpz(sav)
-        sdt.update(kwd)
-        kwd = sdt
-
-        # continue with the progress
+        # resumed fine-tuneing,  use network stored in {sav} if possible
+        _ = kwd.keys()
         if ovr is 1:
+            _.remove('nnt')
+            _.remove('lrt')
             print("continue training.")
 
-        # restart the fine-tuning, reset the network.
+        # restart fine-tuning, use new network in {kwd} if possible
         if ovr is 2:
             print("restart training.")
-            kwd['nnt'] = fdt['nnt']
 
-    kwd = ftn_sae(**kwd)        # <-- __x, nnt, npt, ptn, ...
+        # control parameters in {kwd} take precedence over {sav}
+        kwd.update((k, v) for k, v in lpz(sav).iteritems() if k not in _)
+
+    # <-- __x, nnt, npt, ptn, ... do it.
+    kwd = ftn_sae(**kwd)
 
     # save the progress
     if sav:

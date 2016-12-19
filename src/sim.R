@@ -44,11 +44,11 @@ readTGZ <- function(tgz)
 
 .sim <- function(pck, ssz=100, use=c('all', 'mbd', 'vld'),
                  eft=c('gno', 'non'),
-                 efr=.05, r2=.05, ...)
+                 efr=.15, r2=.05, ...)
 {
     ## genomic matrix and high order features
     use <- match.arg(use, c('all', 'mbd', 'vld'))
-    idx <- c(mdl=1L:1701L, vld=-1L:-1701L, all=-0x7FFF)[use]
+    idx <- list(mbd=1L:1750L, vld=-1L:-1750L, all=-0x7FFF)[[use]]
     umx <- pck$umx[, idx]
     gmx <- pck$gmx[, idx]
     hof <- pck$hof[, idx]
@@ -57,7 +57,7 @@ readTGZ <- function(tgz)
     gmx <- impute(gmx)
 
     ## pick some subjects
-    idx <- sample.int(ncol(gmx), ssz, F)
+    idx <- sample.int(ncol(gmx), ssz, T)
     umx <- umx[, idx]
     gmx <- gmx[, idx]
     hof <- hof[, idx]
@@ -79,8 +79,8 @@ readTGZ <- function(tgz)
     else
     {
         ## additive effect
-        ## gxb <- rnorm(nrow(gmx)) * rbinom(nrow(gmx), 1, efr) * gmx
-        .xb <- rnorm(nrow(umx)) * umx
+        .xb <- rnorm(nrow(gmx)) * rbinom(nrow(gmx), 1, efr) * gmx
+        ## .xb <- rnorm(nrow(umx)) * umx
         .xb <- colSums(.xb)
         .rs <- sqrt((1 - r2) / r2 * var(.xb))
         eta <- .xb + rnorm(ssz, 0, .rs)
@@ -104,7 +104,7 @@ readTGZ <- function(tgz)
     ret
 }
 
-main <- function(fns='sim/H08_U10_D05', out=NULL, n.i=50L, ...)
+main <- function(fns='raw/W08/32_FTN', out=NULL, n.i=50L, ...)
 {
     fns <- dir(fns, '*.tgz', full.names=T)
     fns <- sample(fns, size = n.i, replace=T)

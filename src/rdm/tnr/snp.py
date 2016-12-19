@@ -1,9 +1,9 @@
-from bas import BasTnr
 from copy import deepcopy
 from hlp import paint
 from theano. tensor.sharedvar import TensorSharedVariable as TSV
 
-class Snap(BasTnr):
+
+class Snap(object):
     """
     The component class to enable snap shot for neural network trainers.
     This class must be subclassed along with a Trainer class, to ensure

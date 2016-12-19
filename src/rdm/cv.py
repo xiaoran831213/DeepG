@@ -4,8 +4,7 @@ from collections import OrderedDict as OD
 from itertools import product
 from copy import deepcopy as DC
 import sys
-from tnr.cmn import CmnTnr
-from tnr.snap import Snap
+from tnr.cmn import CmnTnr as Tnr
 from sae import SAE
 import hlp
 import os
@@ -13,16 +12,6 @@ from xutl import spz, lpz
 from pdb import set_trace
 
 sys.path.extend(['..'] if '..' not in sys.path else [])
-
-
-class Tnr(CmnTnr, Snap):
-    """ Combined Trainer class. """
-    def __init__(self, *arg, **kwd):
-        """
-        Constructor.
-        """
-        self.__snap__ = {}      # map of snap shots
-        super(Tnr, self).__init__(*arg, **kwd)
 
 
 # the default lambda grid, with Ne-M format

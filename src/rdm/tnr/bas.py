@@ -1,16 +1,15 @@
 import numpy as np
 import theano
-from matplotlib import pyplot as plt
 from theano import function as F, tensor as T
 from time import time as tm
-from copy import deepcopy
 import exb
 from hlp import C, S, paint, parms
+import sys
 
 FX = theano.config.floatX
 
 
-class BasTnr(object):
+class BasicTrainer(object):
     """
     Class for neural network training.
     """
@@ -215,45 +214,11 @@ class BasTnr(object):
         self.__nnt0__ = paint(self.nnt)  # network for minimum training error
         self.__nnt1__ = paint(self.nnt)  # network for minimum validation error
         self.__eph1__ = self.__hist__[0]['ep']
-        self.__snap__ = {}
 
         # printing format
         self.__pfmt__ = (
-            '{ep:04d}.{bt:03d}: {tcst:.2f} = {terr:.2f} + {lmd:.2e}*{wsum:.1f}'
+            '{ep:04d}: {tcst:.2f} = {terr:.2f} + {lmd:.2e}*{wsum:.1f}'
             '|{verr:.2f}, {gsup:.2e}, {lrt:.2e}')
-
-    def snap(self, key=None, res=False):
-        """ take, review, or restore a snap shot. """
-        shot, skip = {}, ['step', 'nnt']
-        if key is None:         # take a snap shot
-            for k, v in self.__dict__.iteritems():
-                if k.startswith('__') or k in skip:
-                    continue
-                if isinstance(v, type(self.step)):
-                    continue
-                if isinstance(v, type(self.lrt)):
-                    shot[k] = v.get_value()
-                else:
-                    shot[k] = deepcopy(v)
-            shot['nnt'] = paint(self.nnt)
-            self.__snap__[self.ep.get_value().item()] = shot
-        else:                   # retrieve a snap shot
-            shot = self.__snap__.get(key)
-
-        # asking for retoration:
-        if res and key in self.__snap__:
-            for k, v in self.__dict__.iteritems():
-                if k not in shot or k in skip:
-                    continue
-                if isinstance(v, type(self.step)):
-                    continue
-                if isinstance(v, type(self.lmd)):
-                    v.set_value(shot[k])
-                else:
-                    v = shot[k]
-                paint(shot['nnt'], self.nnt)
-
-        return None if len(shot) is 0 else shot
 
     # -------- helper funtions -------- *
     def nsbj(self):
@@ -338,7 +303,7 @@ class BasTnr(object):
             if rec > 0:  # record each batch
                 self.__hist__.append(self.__rpt__())
             if prt > 0:  # print each batch
-                self.cout()
+                print(self)
 
             # see the next epoch relative to batch b0?
             if bt.get_value().item() == b0:
@@ -352,13 +317,14 @@ class BasTnr(object):
                     self.__hist__.append(self.__rpt__())
                 # print
                 if prt == 0:  # print
-                    self.cout()
+                    print(self)
 
                 # adjustment at the end of each epoch
                 if self.__onep__:
                     self.__onep__()
+            sys.stdout.flush()
 
-    def cout(self, ix=None):
+    def __str__(self, ix=None):
         """
         Print out a range of training records.
 
@@ -366,7 +332,6 @@ class BasTnr(object):
         one is shown.
         """
         hs = self.__hist__
-
         if ix is None:
             hs = [self.__hist__[-1]]
         elif ix is int:
@@ -375,9 +340,7 @@ class BasTnr(object):
             hs = hs[ix]
 
         # latest history
-        for h in hs:
-            print(self.__pfmt__.format(**h))
-        sys.stdout.flush()
+        return '\n'.join(self.__pfmt__.format(**h) for h in hs)
 
     def query(self, fc=None, rc=None, out=None):
         """ report the trainer'shot history.
@@ -431,35 +394,3 @@ class BasTnr(object):
             np.savetxt(out, dt, fm, header=hd)
 
         return dt
-
-    def reset(self):
-        """ reset training records. """
-        self.ep.set_value(0)
-        self.bt.set_value(0)
-        self.__hist__ = [self.__rpt__()]
-
-    def plot(self, dx=None, dy=None):
-        """ plot the training graph.
-        dx: dimension on x axis, by default it is time.
-        dy: dimensions on y axis, by defaut it is training and validation
-        errors (if available).
-        """
-        if dx is None:
-            dx = ['time']
-        if dy is None:
-            dy = ['terr']
-            if self.u and self.v:
-                dy = dy + ['verr']
-        else:
-            if '__iter__' not in dir(dy):
-                dy = [dy]
-
-        clr = 'bgrcmykw'
-        dat = self.query(fc=dx + dy)
-
-        plt.close()
-        x = dx[0]
-        for i, y in enumerate(dy):
-            plt.plot(dat[x], dat[y], c=clr[i])
-
-        return plt

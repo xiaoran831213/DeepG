@@ -8,12 +8,11 @@ from rdm.ftn import ftn_sae
 from rdm.sae import SAE
 
 
-def main(fdr='../raw/W08/00_GNO', out=None, **kwd):
+def main(f='../raw/W08/00_GNO', out=None, **kwd):
     """ adaptive training for one autoendocer. """
     nnt = kwd.get('nnt')
     if nnt is None:
-        fnm = np.random.choice(os.listdir(fdr))
-        dat = np.load(pj(fdr, fnm))
+        dat = kwd.get('dat', np.load(pj(f, np.random.choice(ls(f)))))
         gmx, sbj = dat['gmx'], dat['sbj']
 
         # shuffle the observations
@@ -40,8 +39,7 @@ def main(fdr='../raw/W08/00_GNO', out=None, **kwd):
     dim = [dim] + [30]
 
     # nnt[-1].shp = S(1.0, 'Shp', 'f')
-    nnt = kwd.pop('nnt', SAE.from_dim(dim))
-    kwd.update(nnt=nnt)
+    kwd.update(nnt=kwd.pop('nnt', SAE.from_dim(dim)))
 
     # pre-train and fine-tune
     # kwd.update(npt=10)

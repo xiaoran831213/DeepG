@@ -15,7 +15,7 @@ class Snap(object):
     def __init__(self, *arg, **kwd):
         """ Constructor for class Snap. """
         self.__snap__ = {}      # map of snap shots
-        super(Snap).__init__(*arg, **kwd)
+        super(Snap, self).__init__(*arg, **kwd)
 
     def __shot__(self, key=None):
         """ take a snap shot. """
@@ -28,6 +28,7 @@ class Snap(object):
                 ret[k] = v.get_value()
             else:
                 ret[k] = deepcopy(v)
+        ret.update(self.__hist__[-1])
         ret['nnt'] = paint(self.nnt)
         self.__snap__[key] = ret
         return ret
@@ -49,7 +50,6 @@ class Snap(object):
         if '__hist__' in vars(self):
             ep = ret['ep'].item()
             del self.__hist__[ep:]
-        
         return ret
 
     def __list__(self, key=None):

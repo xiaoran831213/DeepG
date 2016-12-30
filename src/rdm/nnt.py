@@ -11,9 +11,9 @@ class Nnt(list):
 
     def __init__(self, seed=None, **kwd):
         """
-        Initialize the neural network base object.
-        kwd:
-        -tag: a short representation of the network.
+        -- seed: seed for random number generator.
+
+        ** tag: a short representation of the network.
         """
         # numpy random number generator
         seed = kwd.pop('seed', None)
@@ -110,10 +110,6 @@ class Nnt(list):
                 return False
         return True
 
-    def NIC(self, y):
-        """ Network Information Criteria. """
-        pass
-    
     def __repr__(self):
         sup = super(Nnt, self).__repr__()
         tag = self.__dict__.get('tag', self.__class__.__name__.upper())

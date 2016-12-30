@@ -3,20 +3,18 @@ import theano
 from theano import function as F, tensor as T
 from time import time as tm
 import exb
-from hlp import C, S, paint, parms
+from hlp import C, S, parms
 import sys
 
 FX = theano.config.floatX
 
 
-class BasicTrainer(object):
+class Base(object):
     """
     Class for neural network training.
     """
-
-    def __init__(self, nnt, x=None, z=None, u=None, v=None, **kwd):
+    def __init__(self, nnt, x=None, z=None, u=None, v=None, *arg, **kwd):
         """
-        Constructor.
         : -------- parameters -------- :
         nnt: an expression builder for the neural network to be trained,
         could be a Nnt object.
@@ -24,7 +22,7 @@ class BasicTrainer(object):
         x: the inputs, with the first dimension standing for sample units.
         If unspecified, the trainer will try to evaluate the entry point and
         cache the result as source data.
-        
+
         z: the labels, with the first dimension standing for sample units.
         if unspecified, a simi-unsupervied training is assumed as the labels
         will be identical to the inputs.
@@ -33,8 +31,8 @@ class BasicTrainer(object):
         v: the validation data labels
 
         : -------- kwd: keywords -------- :
-        -- bsz: size of a training batch
-        -- lrt: basic learning rate
+        -- bsz: batch size.
+        -- lrt: learning rate.
         -- lmb: weight decay factor, the lambda
 
         -- err: expression builder for the computation of training error
@@ -97,8 +95,6 @@ class BasicTrainer(object):
         # the neural network
         self.nnt = nnt
         self.dim = (nnt.dim[0], nnt.dim[-1])
-        # supremum of gradient
-        self.gsup = S(.0)
 
         # inputs and labels, for modeling and validation
         x = S(np.zeros((bsz * 2, self.dim[0]), 'f') if x is None else x)
@@ -208,17 +204,14 @@ class BasicTrainer(object):
 
         # the initial record
         self.__hist__ = [self.__rpt__()]
-        self.__mgsp__ = self.__hist__[0]['gsup']  # minimum gradient supremum
-        self.__mter__ = self.__hist__[0]['terr']  # minimum training error
-        self.__mver__ = self.__hist__[0]['verr']  # minimum validation error
-        self.__nnt0__ = paint(self.nnt)  # network for minimum training error
-        self.__nnt1__ = paint(self.nnt)  # network for minimum validation error
-        self.__eph1__ = self.__hist__[0]['ep']
 
         # printing format
         self.__pfmt__ = (
             '{ep:04d}: {tcst:.2f} = {terr:.2f} + {lmd:.2e}*{wsum:.1f}'
             '|{verr:.2f}, {gsup:.2e}, {lrt:.2e}')
+
+        # pass on inherited initialization.
+        super(Base, self).__init__(*arg, **kwd)
 
     # -------- helper funtions -------- *
     def nsbj(self):
@@ -245,35 +238,20 @@ class BasicTrainer(object):
 
     def __onep__(self):
         """ called on new epoch. """
-        # history records
-        h = self.__hist__
+        pass
 
-        # update the learning rate and suprimum of gradient
-        if h[-1]['terr'] < self.__mter__:  # accelerate
-            self.lrt.set_value(self.lrt.get_value() * self.acc.get_value())
-            paint(self.nnt, self.__nnt0__)
-            self.__mter__ = h[-1]['terr']
-        else:  # slow down
-            self.lrt.set_value(self.lrt.get_value() * self.dec.get_value())
-            paint(self.__nnt0__, self.nnt)
-
-        # update minimum validation error, also save the state
-        if h[-1]['verr'] < self.__mver__ and self.u is not self.x:
-            self.__mver__ = h[-1]['verr']
-            self.__eph1__ = h[-1]['ep']
-            paint(self.nnt, self.__nnt1__)
+    def __onbt__(self):
+        """ called on new batch """
+        pass
 
     def __stop__(self):
         """ return true should the training be stopped. """
-        h = self.__hist__
-        if h[-1]['terr'] < 5e-3:
-            return True
-        if h[-1]['gsup'] < 5e-7:
-            return True
-        if h[-1]['lrt'] < 5e-10:
+        # covergence reached, no more training.
+        r = self.__hist__[-1]
+        if r['terr'] < 5e-3 or r['gsup'] < 5e-7 or r['lrt'] < 5e-10:
             return True
         return False
-   
+
     def tune(self, nep=1, nbt=0, rec=0, prt=0):
         """ tune the parameters by running the trainer {nep} epoch.
         nep: number of epoches to go through
@@ -296,6 +274,7 @@ class BasicTrainer(object):
             # send one batch for training
             t0 = tm()
             self.step()
+            self.__onbt__()     # on each batch
             self.__time__ += tm() - t0
 
             # update history
@@ -319,15 +298,12 @@ class BasicTrainer(object):
                 if prt == 0:  # print
                     print(self)
 
-                # adjustment at the end of each epoch
-                if self.__onep__:
-                    self.__onep__()
+                self.__onep__()  # on each epoch
             sys.stdout.flush()
 
     def __str__(self, ix=None):
         """
         Print out a range of training records.
-
         idx: slice of records to be printed, by default the last
         one is shown.
         """
@@ -350,7 +326,7 @@ class BasicTrainer(object):
         by default all record will pass.
         e.g.:
         >>> query(rc=lambda r: r['eq']<10)  # return the first 10 epoch
-        
+
         out: the file to flush the output. if specified, the query result is
         written to a a tab-delimited file. if 0 is specified, the STDOUT will
         be used.

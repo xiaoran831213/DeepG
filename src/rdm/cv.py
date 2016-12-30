@@ -4,7 +4,7 @@ from collections import OrderedDict as OD
 from itertools import product
 from copy import deepcopy as DC
 import sys
-from tnr.cmn import CmnTnr as Tnr
+from tnr.cmb import Comb as Tnr
 from sae import SAE
 import hlp
 import os

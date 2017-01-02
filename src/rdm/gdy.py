@@ -4,46 +4,46 @@ import os
 import sys
 from os import path as pt
 from xutl import spz, lpz
-from trainer import Trainer as Tnr
+from tnr.cmb import Comb as Tnr
 from sae import SAE
+from hlp import cv_msk
 sys.path.extend(['..'] if '..' not in sys.path else [])
 from pdb import set_trace
 
 
-def gdy_sae(nnt, __x, nep=1, npt=20, **kwd):
+def gdy_sae(w, x, u, nep=1, npt=20, **kwd):
     """ layer-wise unsupervised pre-training for
     stacked autoencoder.
-    nnt: the stacked autoencoders
-    __x: the inputs.
-    ave: the filename to save the progress.
+    -- w: the network, i.e., the stacked autoencoder
+    -- x: the training inputs.
+    -- u: the validation data.
+    
+    -- nep: number of epoch to go through for each layer
+    -- npt: number of pre-train to go through
 
-    ptn: the pre-trainers for each sub AE of the SAE
-    npt: number pf greedy pre-train to go through
-
-    kwd: key words to pass on to the trainer.
-    -- ptn: the pre-trainers
+    ** ptn: the pre-trainers for each sub AE of the SAE
     """
     # the trainers
-    ptn = kwd.get('ptn', [None] * len(nnt.sa))
+    ptn = kwd.get('ptn', [None] * len(w.sa))
 
     # repeatitive pre-training
     for r in range(npt):
-        x_i = __x
-        for i, a in enumerate(nnt.sa):
+        x_i, u_i = x, x if u is None else x
+        for i, a in enumerate(w.sa):
             # the trainer
             if ptn[i] is None:
-                ptn[i] = Tnr(a, x=x_i, u=x_i)
+                ptn[i] = Tnr(a, x=x_i, u=u_i, vdr=.03)
             if x_i is not None:
                 ptn[i].x.set_value(x_i)
-                ptn[i].lrt_inc.set_value(1.02)
+                ptn[i].u.set_value(u_i)
 
             ptn[i].tune(nep)
 
             # wire the data to the bottom of the tuple, the output
             # on top is the training material for next layer
-            x_i = a.ec(x_i).eval()
+            x_i, u_i = a.ec(x_i).eval(), a.ec(u_i).eval()
 
-    kwd.update(ptn=ptn, nnt=nnt, __x=__x, npt=npt)
+    kwd.update(ptn=ptn, npt=npt)
     return kwd
 
 
@@ -55,8 +55,7 @@ def main(fnm, **kwd):
     training. If {fnm} points to a directory, a file is randomly chosen from
     it.
     """
-    # randomly pick pre-training progress if {fnm} is a directory and no record
-    # exists in the saved progress:
+    # randomly pick pre-training progress if {fnm} is a directory
     if pt.isdir(fnm):
         fnm = pt.join(fnm, np.random.choice(os.listdir(fnm)))
     kwd.update(fnm=fnm)
@@ -72,7 +71,12 @@ def main(fnm, **kwd):
     __x = gmx.reshape(gmx.shape[0], -1)
     fdt.update(gmx=gmx, dsg=dsg, __x=__x)
 
-    # parameters in {kwd} takes precedence over those loaded from {fnm}
+    # cross-validation
+    cvk = kwd.get('cvk', 1)     # number of folds, default is 1 (no CV)
+    cvm = cv_msk(__x, cvk)      # sample mask
+    fdt.update(cvk=cvk, cvm=cvm)
+
+    # options in {kwd} takes precedence over those loaded from {fnm}
     fdt.update(kwd)
     kwd = fdt
 
@@ -94,7 +98,7 @@ def main(fnm, **kwd):
         if ovr is 1:
             print("continue training.")
 
-        # restart the fine-tuning, reusing saved training data is OK.
+        # restart the progress, reusing saved training data is OK.
         if ovr is 2:
             print("restart training.")
             del kwd['nnt']
@@ -103,11 +107,13 @@ def main(fnm, **kwd):
     # create neural network if necessary
     if kwd.get('nnt') is None:
         dim = __x.shape[-1]
-        dim = [dim] + [int(dim/2**_) for _ in range(-2, 16) if 2**_ <= dim]
-        kwd['nnt'] = SAE.from_dim(dim)
+        dim = [dim] + [int(dim/2**_) for _ in range(0, 16) if 2**_ <= dim]
+        nws = [SAE.from_dim(dim) for _ in range(cvk)]
+        kwd['nws'] = nws
 
     # do the pre-training:
-    kwd = gdy_sae(**kwd)        # <-- __x, nnt, npt, ptn, ...
+    for i in range(cvk):
+        kwd = gdy_sae(nws[i], __x[-cvm[i]], __x[+cvm[i]], **kwd)
 
     # save the progress
     if sav:

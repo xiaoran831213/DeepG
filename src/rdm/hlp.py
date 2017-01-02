@@ -177,6 +177,22 @@ def dhom(src, tgt):
     return True
 
 
+def cv_msk(x, k, permu=True):
+    """ return masks that randomly partition the data into {k} parts.
+    x: the sample size or the sample data
+    k: the number of partitions.
+    """
+    n = x if isinstance(x, int) else len(x)
+    idx = np.array(np.arange(np.ceil(n / float(k)) * k), '<i4')
+    if permu:
+        idx = np.random.permutation(idx)
+    idx = idx.reshape(k, -1) % n
+    msk = np.zeros((k, n), 'bool')
+    for _ in range(k):
+        msk[_, idx[_, ]] = True
+    return msk
+
+
 def test():
     from sae import SAE
     dm = [100, 200, 300]

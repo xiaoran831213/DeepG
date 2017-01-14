@@ -11,7 +11,7 @@ sys.path.extend(['..'] if '..' not in sys.path else [])
 from pdb import set_trace
 
 
-def gdy_sae(w, x, u, nep=1, npt=20, **kwd):
+def gdy_sae(w, x, u=None, nep=5, npt=5, **kwd):
     """ layer-wise unsupervised pre-training for
     stacked autoencoder.
     -- w: the network, i.e., the stacked autoencoder
@@ -28,12 +28,13 @@ def gdy_sae(w, x, u, nep=1, npt=20, **kwd):
 
     # repeatitive pre-training
     for r in range(npt):
-        x_i, u_i = x, x if u is None else x
+        x_i = x
+        u_i = x if u is None or u.size is 0 else u
         for i, a in enumerate(w.sa):
             # the trainer
             if ptn[i] is None:
-                ptn[i] = Tnr(a, x=x_i, u=u_i, vdr=.03)
-            if x_i is not None:
+                ptn[i] = Tnr(a, x=x_i, u=u_i, **kwd)
+            else:
                 ptn[i].x.set_value(x_i)
                 ptn[i].u.set_value(u_i)
 
@@ -43,11 +44,11 @@ def gdy_sae(w, x, u, nep=1, npt=20, **kwd):
             # on top is the training material for next layer
             x_i, u_i = a.ec(x_i).eval(), a.ec(u_i).eval()
 
-    kwd.update(ptn=ptn, npt=npt)
+    kwd.update(nep=nep, npt=npt)
     return kwd
 
 
-def main(fnm, **kwd):
+def main(fnm='../../raw/W08/00_GNO', **kwd):
     """ the main fine-tune procedure, currently it only supports the Stacked
     Autoencoders(SAEs).
 
@@ -68,57 +69,64 @@ def main(fnm, **kwd):
 
     # dosage format and training format
     dsg = gmx.sum(-2, dtype='<i4')
-    __x = gmx.reshape(gmx.shape[0], -1)
-    fdt.update(gmx=gmx, dsg=dsg, __x=__x)
-
-    # cross-validation
-    cvk = kwd.get('cvk', 1)     # number of folds, default is 1 (no CV)
-    cvm = cv_msk(__x, cvk)      # sample mask
-    fdt.update(cvk=cvk, cvm=cvm)
+    xmx = gmx.reshape(gmx.shape[0], -1)
 
     # options in {kwd} takes precedence over those loaded from {fnm}
-    fdt.update(kwd)
+    fdt.update(kwd, gmx=gmx, dsg=dsg, xmx=xmx)
     kwd = fdt
 
     # check saved progress and overwrite options:
     sav = kwd.get('sav', pt.basename(fnm).split('.')[0])
     ovr = kwd.pop('ovr', 0)
-    if sav and pt.exists(sav + '.pgz'):
+    if pt.exists(sav + '.pgz'):
         print(sav, ": exists,", )
         if ovr is 0 or ovr > 2:  # do not overwrite the progress
             print(" skipped.")
             return kwd
 
-        # parameters in {kwd} take precedence over those from {sav}.
-        sdt = lpz(sav)
-        sdt.update(kwd)
-        kwd = sdt
-
-        # continue with the progress
+        # continue with the progress, new data in xmx can be used
         if ovr is 1:
+            sdt = lpz(sav)
+            kwd.pop('cvk', None)  # use saved K
+            kwd.pop('cvm', None)  # use saved CV masks
+            kwd.pop('cvw', None)  # use saved CV networks
+            kwd.pop('nwk', None)  # use saved network
+
+            # options in keywords take precedence over saved ones
+            sdt.update(kwd)
+            kwd = sdt
             print("continue training.")
 
-        # restart the progress, reusing saved training data is OK.
+        # restart the progress, still uses new data xmx
         if ovr is 2:
             print("restart training.")
-            del kwd['nnt']
     kwd['sav'] = sav
 
-    # create neural network if necessary
-    if kwd.get('nnt') is None:
-        dim = __x.shape[-1]
-        dim = [dim] + [int(dim/2**_) for _ in range(0, 16) if 2**_ <= dim]
-        nws = [SAE.from_dim(dim) for _ in range(cvk)]
-        kwd['nws'] = nws
+    # cross-validation
+    cvk = kwd.get('cvk', 1)                # K
+    cvm = kwd.get('cvm', cv_msk(xmx, cvk))  # CV mask
+    kwd.update(cvk=cvk, cvm=cvm)
+
+    # create neural networks if necessary
+    dim = xmx.shape[-1]
+    dim = [dim] + [int(dim/2**_) for _ in range(1, 16) if 2**_ <= dim]
+    if kwd.get('cvw') is None:  # for cross-validation
+        kwd['cvw'] = [SAE.from_dim(dim) for _ in range(cvk)]
+    if kwd.get('nwk') is None:  # for normal training
+        kwd['nwk'] = SAE.from_dim(dim)
 
     # do the pre-training:
-    for i in range(cvk):
-        kwd = gdy_sae(nws[i], __x[-cvm[i]], __x[+cvm[i]], **kwd)
+    # for CV,
+    for i, m in enumerate(cvm):
+        print('CV: {:02d}/{:02d}'.format(i+1, cvk))
+        kwd = gdy_sae(kwd['cvw'][i], xmx[-m], xmx[+m], **kwd)
+
+    # for normal training
+    print('NT:')
+    kwd = gdy_sae(kwd['nwk'], xmx, xmx, **kwd)
 
     # save the progress
     if sav:
         print("write to: ", sav)
-        ptn = kwd.pop('ptn')
         spz(sav, kwd)
-        kwd['ptn'] = ptn
     return kwd

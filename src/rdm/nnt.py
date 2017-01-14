@@ -90,15 +90,16 @@ class Nnt(list):
         else:
             t = T.sharedvar.TensorSharedVariable
         return dict(
-            (k, v) for k, v in self.__dict__.items() if isinstance(v, t))
+            (k, v) for k, v in vars(self).viewitems() if isinstance(v, t))
 
     def __wreg__(self, **kwd):
         """ sallowly list weight parameters. weights will later be subjected
         to regulator terms for model decay. (e.g. LASSO and Regee regression.)
         By default, the shared tensor member named 'w' will be selected.
         """
+        p = self.__parm__()
         return dict(
-            (k, v) for k, v in self.__dict__.items() if k.startswith('w'))
+            (k, v) for k, v in p.viewitems() if k.startswith('w'))
 
     def __homo__(self, that):
         """ sallowly test homogeneity of topology with another network. """

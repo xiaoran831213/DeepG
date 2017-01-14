@@ -16,7 +16,6 @@ class Pcp(Nnt):
     elements and a bias(or intercept), followed by an per-element non-
     linear transformation(usually sigmoid).
     """
-
     def __init__(self, dim, w=None, b=None, c=None, s=None, **kwd):
         """
         Initialize the perceptron by specifying the the dimension of input
@@ -131,30 +130,35 @@ class Pcp(Nnt):
         visible units (x).
         For now it only works for binary units.
 
-        x: the N * P input linked to the P visible units at the bottom.
-        h: the N * Q output linked to the Q hidden units at the top.
-        w: the weight matrix of P * Q, its (i,j) element tells the negative
-        engery contributed to the system when both the i th. visible unit
-        and and the j th. hidden unit are activated.
+        x: the P-vector of visible units at the bottom, linked to the input.
+        h: the Q-vector of hidden units at the top, linked to the label.
 
-        b: the bias of the hidden units(h), its j th. element gives the
-        negative energy contributed by activating the j th. hidden unit.
-        c: the bias of the visible units(x), its i th. element gives the
-        negative engery contributed by activating the i th. visible unit.
+        W: the Q * P weight matrix, whose (i,j) element gives the negative
+        engery contributed by the ith visible and and the jth hidden units
+        together.
+
+        b: the Q-vector of bias for hidden units, whose j th. element gives
+        the negative energy contributed by the j th. hidden unit.
+
+        c: the P-vector of bias for visible units, whose i th. element gives
+        the negative engery contributed by the i th. visible unit.
+
+        # total system engery:
+        - E(x, h) = c'x + b'h + h'Wx
 
         # some intermediate terms:
-        # ve_ = c'x      # energy of the visibles, fixed.
+        # energy of the visibles, which is fixed because we fix x:
+        # E(x) = c'x
 
-        # integration or sum of energy contributed by the j th. hidden unit
-        # over all its allowed status. for binary units, h_j only takes value
-        # {0, 1}.
-        # sum(hej) = sum(h_j, e^[h_j(c_j + w_j x)])
+        # integration of energy contributed by the j th. hidden unit over its
+        # support. for binary units, h_j only takes value from {0, 1}.
+        # Int:E(h_j) = sum(h_j, e^[h_j(c_j + w_j x)])
         
         # integration or sum of engery contributed by all hidden units, is
         # the direct sum of individual units, because in a RBM all hidden
         # units are not connected.
         # sum(he_) = sum(j, sum(hej))
-        
+
         FE(x) = -ve - /sum_i{/log{/sum_{h_i}{e^{h_i(c_i + W_i %*% x)}}}}.
 
         For binary units, it is simplified since h_i only takes {0, 1}:

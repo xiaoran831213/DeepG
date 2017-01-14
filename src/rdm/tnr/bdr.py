@@ -22,8 +22,8 @@ class Bold(Snap, Base):
 
         # initialize super class.
         super(Bold, self).__init__(*arg, **kwd)
-        self.snap('mter', 's')
-        self.snap('mver', 's')
+        self.snap('mter', 's')  # minimum training error
+        self.snap('mver', 's')  # minimum validation error
 
     def __onep__(self):
         """ called on new epoch. """
@@ -33,11 +33,12 @@ class Bold(Snap, Base):
 
         # update the learning rate and suprimum of gradient
         if r['terr'] < self.snap('mter', 'l')['terr']:  # accelerate
-            self.snap('mter', 's')
             self.lrt.set_value(self.lrt.get_value() * self.acc.get_value())
         else:                   # slow down, and restore saved state
             self.snap('mter', 'r')
             self.lrt.set_value(self.lrt.get_value() * self.dec.get_value())
+
+        self.snap('mter', 's')
 
         # update minimum validation error, also save the state
         if r['verr'] < self.snap('mver', 'l')['verr'] and self.u is not self.x:

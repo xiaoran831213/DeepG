@@ -20,15 +20,19 @@ class Snap(object):
     def __shot__(self, key=None):
         """ take a snap shot. """
         key = -1 if key is None else key
-        ret, skp = {}, Snap.__skip__
+        if '__hist__' in vars(self) and len(self.__hist__) > 0:
+            ret = deepcopy(self.__hist__[-1])
+        else:
+            ret = dict()
+        skp = Snap.__skip__
         for k, v in vars(self).iteritems():
-            if k in skp or callable(v):
+            if k in skp or callable(v) or k.startswith('__'):
                 continue
             if isinstance(v, TSV):
                 ret[k] = v.get_value()
             else:
                 ret[k] = deepcopy(v)
-        ret.update(self.__hist__[-1])
+        # ret.update(self.__hist__[-1])
         ret['nnt'] = paint(self.nnt)
         self.__snap__[key] = ret
         return ret
@@ -49,7 +53,7 @@ class Snap(object):
         # remove history after the snap shot
         if '__hist__' in vars(self):
             ep = ret['ep'].item()
-            del self.__hist__[ep:]
+            del self.__hist__[ep + 1:]
         return ret
 
     def __list__(self, key=None):

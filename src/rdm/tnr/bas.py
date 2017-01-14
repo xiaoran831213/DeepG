@@ -3,8 +3,9 @@ import theano
 from theano import function as F, tensor as T
 from time import time as tm
 import exb
-from hlp import C, S, parms
+from hlp import C, S, par, parms
 import sys
+
 
 FX = theano.config.floatX
 
@@ -13,7 +14,7 @@ class Base(object):
     """
     Class for neural network training.
     """
-    def __init__(self, nnt, x=None, z=None, u=None, v=None, *arg, **kwd):
+    def __init__(self, nnt, x=None, y=None, u=None, v=None, *arg, **kwd):
         """
         : -------- parameters -------- :
         nnt: an expression builder for the neural network to be trained,
@@ -23,7 +24,7 @@ class Base(object):
         If unspecified, the trainer will try to evaluate the entry point and
         cache the result as source data.
 
-        z: the labels, with the first dimension standing for sample units.
+        y: the labels, with the first dimension standing for sample units.
         if unspecified, a simi-unsupervied training is assumed as the labels
         will be identical to the inputs.
 
@@ -36,11 +37,11 @@ class Base(object):
         -- lmb: weight decay factor, the lambda
 
         -- err: expression builder for the computation of training error
-        between the network output {y} and the label {z}. the expression
+        between the network output {yhat} and the label {y}. the expression
         must evaluate to a scalar.
 
         -- reg: expression builder for the computation of weight panalize
-        the vector of parameters {w}, the expression must evaluate to a
+        the vector of parameters {vhat}, the expression must evaluate to a
         scalar.
 
         -- mmt: momentom of the trainer
@@ -98,19 +99,22 @@ class Base(object):
 
         # inputs and labels, for modeling and validation
         x = S(np.zeros((bsz * 2, self.dim[0]), 'f') if x is None else x)
-        z = x if z is None else S(z)
+        y = x if y is None else S(y)
         u = x if u is None else S(u)
         v = u if v is None else S(v)
-        self.x, self.z, self.u, self.v = x, z, u, v
+        self.x, self.y, self.u, self.v = x, y, u, v
 
         # -------- construct trainer function -------- *
         # 1) symbolic expressions
         x = T.tensor(name='x', dtype=x.dtype, broadcastable=x.broadcastable)
-        z = T.tensor(name='z', dtype=z.dtype, broadcastable=z.broadcastable)
-        y = nnt(x)  # expression of predicted output
+        y = T.tensor(name='y', dtype=y.dtype, broadcastable=y.broadcastable)
+        yhat = nnt(x)
+
+        u = T.tensor(name='u', dtype=u.dtype, broadcastable=u.broadcastable)
+        v = T.tensor(name='v', dtype=v.dtype, broadcastable=v.broadcastable)
 
         # list of symbolic parameters to be tuned
-        pars = parms(y)  # parameters
+        pars = parms(yhat)
 
         # list of  symbolic weights to apply decay
         vwgt = T.concatenate([p.flatten() for p in pars if p.name == 'w'])
@@ -118,15 +122,12 @@ class Base(object):
         # symbolic batch cost, which is the mean trainning erro over all
         # observations and sub attributes.
 
-        # The observations are indexed by the first dimension of y and z, while
-        # the sub attributes are indexed by the rest but not last dimensions.
-
-        # The last dimension indices data points for each observation, examples
-        # are voxels in an MRI volume, and SNPs in a genome segment.
-        # Values of these data points are aggregated by the objective function,
-        # err,  which can be L1, L2 norm and CE. the objective function return
-        # an scalar ratting of the training loss.
-        erro = err(y, z).mean()
+        # The observations are indexed by the first dimension of y, the last
+        # dimension indices data entries for each observation,
+        # e.g. voxels in an MRI region, and SNPs in a gene.
+        # The objective function, err, returns a scalar of training loss, it
+        # can be the L1, L2 norm and CE.
+        erro = err(yhat, y).mean()
 
         # the sum of weights calculated for weight decay.
         wsum = reg(vwgt)
@@ -163,8 +164,8 @@ class Base(object):
         # 3) the trainer functions
         # expression of batch and whole data feed:
         _ = T.arange((self.bt + 0) * self.bsz, (self.bt + 1) * self.bsz)
-        bts = {x: self.x.take(_, -2, 'wrap'), z: self.z.take(_, -2, 'wrap')}
-        dts = {x: self.x, z: self.z}
+        bts = {x: self.x.take(_, -2, 'wrap'), y: self.y.take(_, -2, 'wrap')}
+        dts = {x: self.x, y: self.y}
 
         # each invocation sends one batch of training examples to the network,
         # calculate total cost and tune the parameters by gradient decent.
@@ -177,16 +178,15 @@ class Base(object):
         # weights, and parameters
         self.wsum = F([], wsum, name="wsum")
         self.gsup = F([], gsup, name="gsup", givens=dts)
-
         # * -------- done with trainer functions -------- *
 
         # * -------- validation functions -------- *
         # enable validation binary disruption (binary)?
         if self.vdr:
             _ = self.__trng__.binomial(self.v.shape, 1, self.vdr, dtype=FX)
-            vts = {x: self.u, z: (self.v + _) % C(2.0, FX)}
+            vts = {x: self.u, y: (self.v + _) % C(2.0, FX)}
         else:
-            vts = {x: self.u, z: self.v}
+            vts = {x: self.u, y: self.v}
         self.verr = F([], erro, name="verr", givens=vts)
 
         # * ---------- logging and recording ---------- *
@@ -211,12 +211,9 @@ class Base(object):
             '|{verr:.2f}, {gsup:.2e}, {lrt:.2e}')
 
         # pass on inherited initialization.
-        super(Base, self).__init__(*arg, **kwd)
+        # super(Base, self).__init__(*arg, **kwd)
 
     # -------- helper funtions -------- *
-    def nsbj(self):
-        return self.x.get_value().shape[-2]
-
     def nbat(self):
         return self.x.get_value().shape[-2] // self.bsz.get_value()
 
@@ -227,8 +224,8 @@ class Base(object):
         x: network input
         evl: evaludate the expression (default = True)
         """
-        y = self.nnt(self.x if x is None else x)
-        return y.eval() if evl else y
+        yhat = self.nnt(self.x if x is None else x)
+        return yhat.eval() if evl else yhat
 
     def __rpt__(self):
         """ report current status. """
@@ -247,8 +244,10 @@ class Base(object):
     def __stop__(self):
         """ return true should the training be stopped. """
         # covergence reached, no more training.
+        if len(self.__hist__) < 1L:
+            return False
         r = self.__hist__[-1]
-        if r['terr'] < 5e-3 or r['gsup'] < 5e-7 or r['lrt'] < 5e-10:
+        if r['terr'] < 5e-3 or r['gsup'] < 5e-8 or r['lrt'] < 5e-11:
             return True
         return False
 

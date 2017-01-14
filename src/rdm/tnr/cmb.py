@@ -1,9 +1,7 @@
 import theano
 from bdr import Bold
-import sys
 from hlp import S
 
-sys.path.extend(['..'] if '..' not in sys.path else [])
 FX = theano.config.floatX
 
 
@@ -29,4 +27,3 @@ class Comb(Bold):
         self.nct = S(kwd.get('nct', 9.), 'NCT')
         
         super(Comb, self).__init__(*arg, **kwd)
-        print('Combined Trainer.')

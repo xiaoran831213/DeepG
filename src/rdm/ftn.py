@@ -8,7 +8,8 @@ from xutl import spz, lpz
 sys.path.extend(['..'] if '..' not in sys.path else [])
 
 
-def ftn_sae(w, x, u=None, nft=None, ae0=None, ae1=None, lrt=.01, **kwd):
+def ftn_sae(w, x, u=None, nft=None,
+            ae0=None, ae1=None, lrt=.01, hte=0.005, **kwd):
     """ layer-wise unsupervised pre-training for
     stacked autoencoder.
     w: the stacked autoencoders
@@ -35,7 +36,7 @@ def ftn_sae(w, x, u=None, nft=None, ae0=None, ae1=None, lrt=.01, **kwd):
     u = w.sub(ae0, 0).ec(u).eval() if ae0 and u else u
 
     # build the trainer of fine-tuning:
-    ftn = Tnr(w, x, u=u, lrt=lrt, **kwd)
+    ftn = Tnr(w, x, u=u, lrt=lrt, hte=hte, **kwd)
 
     # fine-tune
     nft = 20 if nft is None else nft
@@ -76,29 +77,30 @@ def main(fnm='../../sim/W08/10_PTN', **kwd):
         if ovr is 0 or ovr > 2:  # do not overwrite the progress
             print(" skipped.")
             return kwd
-        else:
-            sdt = lpz(sav)
-
-        # resumed fine-tuneing,  use network stored in {sav} if possible
-        # continue with the progress
-        if ovr is 1:
-            kwd.pop('cvw', None)  # use saved ANNs for CV
-            kwd.pop('nwk', None)  # use saved ANNs for training
-            kwd.pop('cvl', None)  # use saved learning rate for CV
-            kwd.pop('lrt', None)  # use saved learning rate for training
-
-            # remaining options in {kwd} take precedence over {sav}.
-            sdt = lpz(sav)
-            sdt.update(kwd)
-            kwd = sdt
-            print("continue training.")
     else:
-        ovr = 2                 # no saved progress, restart anyway
-    if ovr is 2:                # restart the training
-        kwd.pop('lrt', None)    # do not use archived LRT for training
-        kwd.pop('cvl', None)    # do not use archived LRT for CV
+        ovr = 2
+
+    # resume progress, use network stored in {sav}.
+    if ovr is 1:
+        kwd.pop('cvw', None)    # use saved networks for CV
+        kwd.pop('nwk', None)    # use saved network for training
+        kwd.pop('cvl', None)    # use saved CV LRT
+        kwd.pop('cvh', None)    # use saved CV halting state
+        kwd.pop('cve', None)    # use saved CV halting error
+        kwd.pop('lrt', None)    # use saved learning rate for training
+
+        # remaining options in {kwd} take precedence over {sav}.
+        sdt = lpz(sav)
+        sdt.update(kwd)
+        kwd = sdt
+        print("continue training.")
+    else:                       # restart the training
+        kwd.pop('lrt', None)    # do not use archived NT LRT
+        kwd.pop('cvl', None)    # do not use archived CV LRT
+        kwd.pop('cve', None)    # do not use archived CV errors
+        kwd.pop('cvh', None)    # do not use archived CV halting state
         print("restart training.")
-        
+
     # <-- __x, w, npt, ptn, ... do it.
     xmx = kwd['xmx']            # training data
     nwk = kwd['nwk']            # the whole network, not subset
@@ -109,10 +111,16 @@ def main(fnm='../../sim/W08/10_PTN', **kwd):
     cvk = kwd['cvk']            # CV folds
     cvm = kwd['cvm']            # CV partitaion mask
     cvw = kwd['cvw']            # CV networks
+    # CV halting
+    cvh = kwd.get('cvh', [False] * cvk)
 
     # learing rates for normal training and CV
     lrt = kwd.pop('lrt', .01)
     cvl = kwd.pop('cvl', [lrt] * cvk)
+
+    # NT halting error and CV errors
+    hte = kwd.pop('hte', .005)
+    cve = kwd.pop('cve', np.ndarray((cvk, 2)))
 
     # create error tables if necessary:
     if kwd.get('etb') is None:
@@ -128,31 +136,45 @@ def main(fnm='../../sim/W08/10_PTN', **kwd):
 
     # fine-tuning
     # 1) for CV:
-    cve = np.ndarray(cvk)       # CV errors
     for i, m in enumerate(cvm):
-        print('CV: {:02d}/{:02d}'.format(i+1, cvk))
+        msg = 'CV: {:02d}/{:02d}'.format(i+1, cvk)
+        if cvh[i]:
+            msg = msg + ' halted.'
+            print(msg)
+            continue
+        print(msg)
         kwd = ftn_sae(cvw[i], xmx[-m], xmx[+m], lrt=cvl[i], **kwd)
 
         # collect the output
         ftn = kwd.pop('ftn')
         cvl[i] = ftn.lrt.get_value()  # learning rate
-        cve[i] = ftn.verr()           # CV errors
-    etb[ae1, 1] = cve.mean()          # mean CV error
+        cve[i, 0] = ftn.terr()        # CV training error
+        cve[i, 1] = ftn.verr()        # CV validation error
+        cvh[i] = ftn.hlt.get_value()  # CV halting
 
+    # mean CV validation error
+    etb[ae1, 1] = cve[:, 1].mean()
+
+    # mean CV training error as NT halting error
+    hte = cve[:, 0].mean()
+    
     # 2) for normal training:
-    print('NT:')
-    kwd = ftn_sae(nwk, xmx, xmx, lrt=lrt, **kwd)
-    ftn = kwd.pop('ftn')
-    lrt = ftn.lrt.get_value()    # learning rate
-    etb[ae1, 0] = ftn.terr()     # normal error
+    # happens when all CV is halted or converged.
+    if np.all(cvh):
+        print('NT: HTE = {}'.format(hte))
+        kwd = ftn_sae(nwk, xmx, xmx, lrt=lrt, hte=hte, **kwd)
+        ftn = kwd.pop('ftn')
+        lrt = ftn.lrt.get_value()  # learning rate
+        etb[ae1, 0] = ftn.terr()   # normal error
+        if ftn.hlt.get_value():
+            print('NT: halted.')
+        # high order features
+        hof[ae1] = ftn.nnt.ec(xmx).eval()
+    else:
+        print('NT: HTE = ??')   # not ready for NT
 
-    # high order features
-    hof[ae1] = ftn.nnt.ec(xmx).eval()
-
-    # 3) update progress
-    kwd.update(cvl=cvl, lrt=lrt, etb=etb, hof=hof)
-
-    # save the progress
+    # 3) update progress and saving.
+    kwd.update(cvl=cvl, cve=cve, cvh=cvh, lrt=lrt, etb=etb, hof=hof)
     if sav:
         print("write to: ", sav)
         spz(sav, kwd)
@@ -195,8 +217,8 @@ def ept(fnm, out=None):
     np.savetxt(pt.join(tpd, 'sbj.txt'), dat.pop('sbj'), '%s')
 
     # final high-order features
-    xmx, nwk = dat.pop('xmx'), dat.pop('nwk')
-    np.savetxt(pt.join(tpd, 'hff.txt'), nwk.ec(xmx).eval(), '%.8f')
+    # xmx, nwk = dat.pop('xmx'), dat.pop('nwk')
+    # np.savetxt(pt.join(tpd, 'hff.txt'), nwk.ec(xmx).eval(), '%.8f')
 
     # sub high-order features
     hof = dat.pop('hof')

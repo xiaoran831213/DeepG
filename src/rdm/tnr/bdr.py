@@ -22,8 +22,8 @@ class Bold(Snap, Base):
 
         # initialize super class.
         super(Bold, self).__init__(*arg, **kwd)
-        self.snap('mter', 's')  # minimum training error
-        self.snap('mver', 's')  # minimum validation error
+        self.snap('meot', 's')  # minimum training error
+        self.snap('meov', 's')  # minimum validation error
 
     def __onep__(self):
         """ called on new epoch. """
@@ -32,17 +32,40 @@ class Bold(Snap, Base):
         r = self.__hist__[-1]
 
         # update the learning rate and suprimum of gradient
-        if r['terr'] < self.snap('mter', 'l')['terr']:  # accelerate
+        if r['terr'] < self.snap('meot', 'l')['terr']:  # accelerate
             self.lrt.set_value(self.lrt.get_value() * self.acc.get_value())
         else:                   # slow down, and restore saved state
-            self.snap('mter', 'r')
+            self.snap('meot', 'r')
             self.lrt.set_value(self.lrt.get_value() * self.dec.get_value())
 
-        self.snap('mter', 's')
+        self.snap('meot', 's')
 
         # update minimum validation error, also save the state
-        if r['verr'] < self.snap('mver', 'l')['verr'] and self.u is not self.x:
-            self.snap('mver', 's')
+        if r['verr'] < self.snap('meov', 'l')['verr'] and self.u is not self.x:
+            self.snap('meov', 's')
 
         # super class call
         super(Bold, self).__onep__()
+
+    def __stop__(self):
+        """ called on each epoch, return true if the training
+        should be halted. """
+        # current state
+        c = self.__hist__[-1]
+
+        # minimum validation error
+        m = self.snap('meov')
+        if m is None:
+            return False
+
+        # stop on rising validation error.
+        hlt = True
+        hlt = hlt and c['verr'] > m['verr']
+        hlt = hlt and c['terr'] < m['terr']
+        hlt = hlt and c['ep'] - m['ep'] > 20
+        if hlt:
+            # restore the state with lowest validation error.
+            self.snap('meov', 'r')
+            self.hlt.set_value(2)  # increased validation error.
+            return True
+        return super(Bold, self).__stop__()

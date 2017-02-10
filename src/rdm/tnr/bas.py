@@ -3,7 +3,7 @@ import theano
 from theano import function as F, tensor as T
 from time import time as tm
 import exb
-from hlp import C, S, par, parms
+from hlp import C, S, parms
 import sys
 
 
@@ -32,21 +32,22 @@ class Base(object):
         v: the validation data labels
 
         : -------- kwd: keywords -------- :
-        -- bsz: batch size.
-        -- lrt: learning rate.
-        -- lmb: weight decay factor, the lambda
+        ** bsz: batch size.
+        ** lrt: learning rate.
+        ** lmb: weight decay factor, the lambda
 
-        -- err: expression builder for the computation of training error
+        ** err: expression builder for the computation of training error
         between the network output {yhat} and the label {y}. the expression
         must evaluate to a scalar.
 
-        -- reg: expression builder for the computation of weight panalize
+        ** reg: expression builder for the computation of weight panalize
         the vector of parameters {vhat}, the expression must evaluate to a
         scalar.
 
-        -- mmt: momentom of the trainer
+        ** mmt: momentom of the trainer
 
-        -- vdr: validation disruption rate
+        ** vdr: validation disruption rate
+        ** hte: the halting training error.
         """
         # numpy random number generator
         seed = kwd.pop('seed', None)
@@ -67,6 +68,9 @@ class Base(object):
         # the validation disruption
         self.vdr = S(kwd.get('vdr'), 'VDR')
 
+        # the stopping training error
+        self.hte = S(kwd.get('hte', .005), 'HTE')
+
         # current epoch index, use int64
         self.ep = S(0, 'EP')
 
@@ -76,6 +80,12 @@ class Base(object):
 
         # current batch index, use int64
         self.bt = S(0, 'BT')
+
+        # has the training been halt for a number of reasons?
+        # 1: due to converge.
+        # 2: due to rising validation error (early stop rule).
+        # 3: fail to converge?
+        self.hlt = S(0, 'HLT')
 
         # momentumn, make sure momentum is a sane value
         mmt = kwd.get('mmt', .0)
@@ -208,7 +218,7 @@ class Base(object):
         # printing format
         self.__pfmt__ = (
             '{ep:04d}: {tcst:.2f} = {terr:.2f} + {lmd:.2e}*{wsum:.1f}'
-            '|{verr:.2f}, {gsup:.2e}, {lrt:.2e}')
+            '|{verr:.2f}, {gsup:.2e}, {lrt:.2e}, {hte:.2f}')
 
         # pass on inherited initialization.
         # super(Base, self).__init__(*arg, **kwd)
@@ -243,11 +253,24 @@ class Base(object):
 
     def __stop__(self):
         """ return true should the training be stopped. """
-        # covergence reached, no more training.
+        # already halted?
+        if self.hlt.get_value():
+            return True
+        
+        # no training histoty, no-stopping.
         if len(self.__hist__) < 1L:
             return False
+
+        # check the latest history
         r = self.__hist__[-1]
-        if r['terr'] < 5e-3 or r['gsup'] < 5e-8 or r['lrt'] < 5e-11:
+        if r['gsup'] < 5e-7:
+            self.hlt.set_value(1)  # convergence
+            return True
+        if r['lrt'] < 5e-7:
+            self.hlt.set_value(3)  # non-convergence
+            return True
+        if r['terr'] < self.hte.get_value():  # early stop
+            self.hlt.set_value(2)
             return True
         return False
 

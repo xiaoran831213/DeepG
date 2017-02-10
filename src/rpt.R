@@ -15,14 +15,33 @@ sum.rpt <- function(rp)
     {
         sum(p < .05, na.rm=T) / sum(!is.na(p))
     }
-    su <- aggregate(pvl ~ ssz + use + knl, data=rp, FUN=.power)
+    rp$seq <- NULL
+    dt.keys <- c('pvl.gno', 'pvl.hof', 'ngv', 'eot', 'eov')
+    ix.keys <- names(rp)[!names(rp) %in% dt.keys]
+    ix <- rp[, ix.keys]
+    su <- by(rp, ix, function(r)
+    {
+        r <- data.frame(
+            r[1, ix.keys],
+            pow.gno=.power(r$pvl.gno),
+            pow.hof=.power(r$pvl.hof),
+            avg.ngv=mean(r$ngv),
+            avg.eov=mean(r$eov),
+            stringsAsFactors=F)
+        r
+    })
+    su <- do.call(rbind, su)
     su
 }
 
 sum.plt <- function(su)
 {
-    g <- ggplot(su, aes(x=ssz, y=pvl))
-    g <- g + geom_line(aes(colour=knl, linetype=use))
+    g <- ggplot(su)
+    ## g <- g + geom_line(aes(x=ssz, y=pow.hof, color=as.factor(ssp)))
+    ## g <- g + facet_wrap(~ wdp)
+    ## g <- g + facet_grid(ssp ~ wdp)
+    g <- g + geom_line(aes(x=ssz, y=pow.hof, colour=as.factor(wdp)))
+    g <- g + facet_wrap(~ ssp)
     g
 }
 
@@ -34,21 +53,12 @@ sum.all <- function(fr)
     list(d=dt, s=su, g=gp)
 }
 
-main <- function(fr='sim/32')
+main <- function()
 {
-    r_32 <- sum.all('raw/W08/_32HWU')
-    r_64 <- sum.all('raw/W08/_64HWU')
-    r128 <- sum.all('raw/W08/128HWU')
-    r256 <- sum.all('raw/W08/256HWU')
-    r512 <- sum.all('raw/W08/512HWU')
-    r1k_ <- sum.all('raw/W08/1k_HWU')
+    rNE <- sum.all('sim/W08/40_ET1')
+    rCV <- sum.all('sim/W08/40_CV4')
 
-    ggsave('rpt/r_32.png', r_32$g)
-    ggsave('rpt/r_64.png', r_64$g)
-    ggsave('rpt/r128.png', r128$g)
-    ggsave('rpt/r256.png', r256$g)
-    ggsave('rpt/r512.png', r512$g)
-    ggsave('rpt/r1k_.png', r1k_$g)
-
-    rbind(r_32$s, r_64$s, r128$s, r256$s, r512$s, r1k_$s)
+    ggsave('rpt/r_ne.png', rNE$g)
+    ggsave('rpt/r_cv.png', rCV$g)
+    rbind(rNE$s, rCV$s)
 }

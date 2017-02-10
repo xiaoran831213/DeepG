@@ -48,7 +48,7 @@ def gdy_sae(w, x, u=None, nep=5, npt=5, **kwd):
     return kwd
 
 
-def main(fnm='../../raw/W08/00_GNO', **kwd):
+def main(fnm='../../raw/W09', **kwd):
     """ the main fine-tune procedure, currently it only supports the Stacked
     Autoencoders(SAEs).
 
@@ -69,7 +69,26 @@ def main(fnm='../../raw/W08/00_GNO', **kwd):
 
     # dosage format and training format
     dsg = gmx.sum(-2, dtype='<i4')
-    xmx = gmx.reshape(gmx.shape[0], -1)
+
+    # mark some untyped subjects
+    usb = kwd.get('usb', 1.0)
+    __i = np.random.choice(gmx.shape[+0], usb * gmx.shape[+0], False)
+    usb = np.zeros(gmx.shape[+0], 'u1')
+    usb[__i] = 1
+
+    # mark some variants as untyped, if requested
+    ugv = kwd.get('ugv', 1.0)
+    __i = np.random.choice(gmx.shape[-1], ugv * gmx.shape[-1], False)
+    ugv = np.zeros(gmx.shape[-1], 'u1')
+    ugv[__i] = 1
+
+    # collect untyped subjects and variants
+    kwd['usb'] = usb        # untyped subject mask
+    kwd['ugv'] = ugv        # untyped variant mask
+
+    # training data
+    xmx = gmx[usb == 0, :, :][:, :, ugv == 0]
+    xmx = xmx.reshape(xmx.shape[0], -1)
 
     # options in {kwd} takes precedence over those loaded from {fnm}
     fdt.update(kwd, gmx=gmx, dsg=dsg, xmx=xmx)

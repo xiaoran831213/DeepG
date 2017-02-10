@@ -100,3 +100,7 @@ sim
 # R files
 .RData
 .Rhistory
+
+# symbolic links
+src/dsg.R
+src/hwu.R

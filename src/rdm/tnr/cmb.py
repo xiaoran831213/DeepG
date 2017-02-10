@@ -19,7 +19,6 @@ class Comb(Bold):
         far is aboved this, the training is dimmed not converging if also
         {epoch == nce} is reached.
         """
-
         # non-convergence epoch
         self.nce = S(kwd.get('nce', 20), 'NCE')
 

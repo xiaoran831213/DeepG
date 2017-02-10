@@ -6,9 +6,7 @@ source('src/hwu.R')
 readTGZ <- function(tgz)
 {
     tmpd <- tempdir()
-    data <- c('dsg', 'usg', 'inf', 'gmp', 'hof')
-    data <- paste(data, 'txt', sep='.')
-    untar(tgz, data, exdir=tmpd)
+    untar(tgz, exdir=tmpd)
     data <- list()
 
     ## meta information
@@ -17,54 +15,77 @@ readTGZ <- function(tgz)
     nms <- sapply(inf, `[`, 1L)
     inf <- lapply(inf, `[`, 2L)
     names(inf) <- nms
+    inf <- inf[c('ae1', 'cvk', 'cvl', 'lrt', 'fnm', 'out', 'nwk')]
 
     ## genomic map
     gmp <- readLines(file.path(tmpd, 'gmp.txt'))
     gmp <- sub('\\\\', '\t', gmp)
     gmp <- read.table(text=gmp, sep='\t')
     names(gmp) <- c('CHR', 'POS', 'ID')
+    gvr <- gmp$ID
+    ngv <- length(gvr)
 
+    ## subjects
+    ## sbj <- scan(file.path(tmpd, 'sbj.txt'), '', quiet=T)
+    
     ## genomic matrix
     gmx <- readLines(file.path(tmpd, 'dsg.txt'))
     nsb <- length(gmx)
+    sbj <- sprintf('%04X', 1:nsb)
     gmx <- scan(text=gmx, what=0L, quiet=T)
-    gmx <- matrix(gmx, length(gmx) / nsb, nsb)
+    gmx <- matrix(gmx, ngv, nsb, dimnames=list(gvr=gvr, sbj=sbj))
 
     ## untyped variants
-    umx <- scan(file.path(tmpd, 'usg.txt'), 0L, quiet=T)
-    umx <- matrix(umx, length(umx) / nsb, nsb)
+    ## umx <- scan(file.path(tmpd, 'usg.txt'), 0L, quiet=T)
+    ## umx <- matrix(
+    ##     umx, length(umx) / length(sbj), length(sbj))
+
+    ## the error table
+    etb <- readLines(file.path(tmpd, 'etb.txt'))
+    etb <- scan(text=etb, what=.0, quiet=T)
+    ndp <- length(etb)/2
+    dnm <- list(paste('d', 0:(ndp-1), sep=''), c('eot', 'eov'))
+    etb <- matrix(etb, ndp, 2, byrow=T, dimnames=dnm)
     
     ## high order features
-    hof <- scan(file.path(tmpd, 'hof.txt'), .0, quiet=T)
-    nhf <- length(hof) / nsb
-    hof <- matrix(hof, nhf, nsb)
-    
-    list(gmx=gmx, umx=umx, hof=hof, gmp=gmp, inf=inf)
+    hof <- list()
+    for(i in 0:9)
+    {
+        f <- file.path(tmpd, paste('hf', i, '.txt', sep=''))
+        if(!file.exists(f))
+            next
+        h <- scan(f, .0, quiet=T)
+        r <- length(h)/nsb
+        dnm <- list(ftr=sprintf('H%03X', 1:r), sbj=sbj)
+        h <- matrix(h, r, nsb, dimnames=dnm)
+        hof[[paste('d', i, sep='')]] <- h
+    }
+    list(gmx=gmx, hof=hof, gmp=gmp, inf=inf, sbj=sbj, etb=etb)
 }
 
-.sim <- function(pck, ssz=100, use=c('all', 'mbd', 'vld'),
+.sim <- function(pck, ssz=100,
                  eft=c('gno', 'non'),
-                 efr=.15, r2=.05, ...)
+                 efr=.15, r2=.10, wdp=3, ...)
 {
-    ## genomic matrix and high order features
-    use <- match.arg(use, c('all', 'mbd', 'vld'))
-    idx <- list(mbd=1L:1750L, vld=-1L:-1750L, all=-0x7FFF)[[use]]
-    umx <- pck$umx[, idx]
-    gmx <- pck$gmx[, idx]
-    hof <- pck$hof[, idx]
+    .dp <- paste('d', wdp, sep='')
+    eot <- pck$etb[.dp, 'eot']
+    eov <- pck$etb[.dp, 'eov']
+    hof <- pck$hof[[.dp]]
     
-    ## guess genomic NA
+    ## genomic matrix
+    gmx <- pck$gmx
+    ssp <- ncol(gmx)                    # size of sample pool
     gmx <- impute(gmx)
 
     ## pick some subjects
     idx <- sample.int(ncol(gmx), ssz, T)
-    umx <- umx[, idx]
+    ## umx <- umx[, idx]
     gmx <- gmx[, idx]
     hof <- hof[, idx]
     
     ## check genotype degeneration
     gmx <- rmDgr(gmx)
-    umx <- rmDgr(umx)
+    ## umx <- rmDgr(umx)
     ngv <- nrow(gmx)                   # number of genomic variants
     nhf <- nrow(hof)                   # number of high order features
 
@@ -89,43 +110,40 @@ readTGZ <- function(tgz)
     y <- I(eta)
     
     ## * -------- U sta and P val --------*
-    .pvl.gno <- hwu.dg2(y, .wct(.hwu.IBS(t(gmx))))
-    .pvl.hof <- hwu.dg2(y, .wct(.hwu.GUS(t(hof))))
-
-    eov <- as.numeric(pck$inf$verr)     # error of validation
-    eot <- as.numeric(pck$inf$terr)     # error of training
-    lmd <- as.numeric(pck$inf$lmd)      # weight decay lambda
+    pvl.gno <- hwu.dg2(y, .wct(.hwu.IBS(t(gmx))))
+    pvl.hof <- hwu.dg2(y, .wct(.hwu.GUS(t(hof))))
 
     rec <- .record()
-    ret <- list(
-        c(rec, knl='gno', pvl=.pvl.gno),
-        c(rec, knl='hof', pvl=.pvl.hof))
-    ret <- lol2tab(ret)
-    ret
+    rec
 }
 
-main <- function(fns='raw/W08/32_FTN', out=NULL, n.i=50L, ...)
+main <- function(fns='sim/W08/30_HW5', fn2='sim/W08/31_HW5', out=NULL, n.i=100L, ...)
 {
     fns <- dir(fns, '*.tgz', full.names=T)
-    fns <- sample(fns, size = n.i, replace=T)
-
+    fn2 <- dir(fn2, '*.tgz', full.names=T)
+    
+    idx <- sample.int(length(fns), size = n.i, replace=T)
+    fns <- c(fns[idx], fn2[idx])
+    seq <- sub('[.][^.]*$', '', basename(fns))
+    
     ## get extra arguments, also remove NULL arguments so they won't
     ## cause havoc in expand.grid
     dot <- list(...)
     dot <- dot[!sapply(dot, is.null)]
     
     if(length(dot) < 1L)
-        args <- data.frame(gnf=fns, stringsAsFactors = F)
+        args <- data.frame(seq=seq, gnf=fns, stringsAsFactors = F)
     else
     {
         ## idx = 1L:n.i expands the repetitions.
-        args <- list(idx = 1L:n.i, KEEP.OUT.ATTRS = F, stringsAsFactors = F)
+        args <- list(idx = 1L:(2*n.i), KEEP.OUT.ATTRS = F, stringsAsFactors = F)
         args <- do.call(expand.grid, c(dot, args))
         args <- args[do.call(order, args[, names(dot), drop = F]), ]
         args <- within(
             args,
         {
             gnf <- fns[idx]
+            seq <- seq[idx]
             rm(idx)
         })
     }
@@ -139,9 +157,12 @@ main <- function(fns='raw/W08/32_FTN', out=NULL, n.i=50L, ...)
         ## print(a$gnf)
         cat(paste(a, collapse='\t'), '\n')
         a$pck <- readTGZ(a$gnf)
-        do.call(.sim, a)
+        r <- do.call(.sim, a)
+        r$seq <- a$seq
+        r
     })
-    rpt <- do.call(rbind, rpt)
+    ## rpt <- do.call(rbind, rpt)
+    rpt <- lol2tab(rpt)
 
     ## report and return
     if(!is.null(out))

@@ -122,7 +122,7 @@ def main(fnm='../../raw/W09', **kwd):
     kwd['sav'] = sav
 
     # cross-validation
-    cvk = kwd.get('cvk', 1)                # K
+    cvk = kwd.get('cvk', 2)                # K
     cvm = kwd.get('cvm', cv_msk(xmx, cvk))  # CV mask
     kwd.update(cvk=cvk, cvm=cvm)
 

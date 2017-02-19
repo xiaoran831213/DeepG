@@ -6,6 +6,7 @@ from os import path as pt
 from tnr.cmb import Comb as Tnr
 from xutl import spz, lpz
 sys.path.extend(['..'] if '..' not in sys.path else [])
+from pdb import set_trace
 
 
 def ftn_sae(w, x, u=None, nft=None,
@@ -48,7 +49,7 @@ def ftn_sae(w, x, u=None, nft=None,
     return kwd
 
 
-def main(fnm='../../sim/W08/10_PTN', **kwd):
+def main(fnm='../../sim/W09/10_PTN', **kwd):
     """ the fine-tune procedure for Stacked Autoencoder(SAE).
 
     -- fnm: pathname to the input, supposingly the saved progress after the
@@ -131,8 +132,12 @@ def main(fnm='../../sim/W08/10_PTN', **kwd):
     # create high order feature (HOF) table:
     if kwd.get('hof') is None:
         kwd['hof'] = [None] * (dph + 1)
-        kwd['hof'][0] = xmx     # raw data as trivial HOF
     hof = kwd['hof']
+
+    # # raw data as trivial HOF
+    _ = kwd['gmx'][:, :, kwd['ugv'] < 1]
+    _ = _.reshape(_.shape[0], -1)
+    hof[0] = _
 
     # fine-tuning
     # 1) for CV:
@@ -168,8 +173,11 @@ def main(fnm='../../sim/W08/10_PTN', **kwd):
         etb[ae1, 0] = ftn.terr()   # normal error
         if ftn.hlt.get_value():
             print('NT: halted.')
-        # high order features
-        hof[ae1] = ftn.nnt.ec(xmx).eval()
+
+        # high order features for all individuals, with typed variants
+        _ = kwd['gmx'][:, :, kwd['ugv'] < 1]
+        _ = _.reshape(_.shape[0], -1)
+        hof[ae1] = ftn.nnt.ec(_).eval()
     else:
         print('NT: HTE = ??')   # not ready for NT
 
@@ -215,6 +223,12 @@ def ept(fnm, out=None):
 
     # subjects
     np.savetxt(pt.join(tpd, 'sbj.txt'), dat.pop('sbj'), '%s')
+
+    # untyped subjects (indices)
+    np.savetxt(pt.join(tpd, 'usb.txt'), dat.pop('usb'), '%d')
+
+    # untyped variants (indices)
+    np.savetxt(pt.join(tpd, 'ugv.txt'), dat.pop('ugv'), '%d')
 
     # final high-order features
     # xmx, nwk = dat.pop('xmx'), dat.pop('nwk')

@@ -3,16 +3,15 @@ import numpy as np
 from collections import OrderedDict as OD
 from itertools import product
 from copy import deepcopy as DC
-try:
-    from trainer import Trainer as Tnr
-    import hlp
-except ValueError:
-    from .trainer import Trainer as Tnr
-    from . import hlp
 import sys
+from tnr.cmb import Comb as Tnr
+from sae import SAE
+import hlp
 import os
-
+from xutl import spz, lpz
 from pdb import set_trace
+
+sys.path.extend(['..'] if '..' not in sys.path else [])
 
 
 # the default lambda grid, with Ne-M format
@@ -135,15 +134,14 @@ def cv_sae_lmd_all(lmt=20, lbk=20, **p):
     return p
 
 
-# depth of SAE
-def cv_sae_lyr_one(nnt, __x, k=4, **kwd):
+# number of hidden units in total
+def cv_sae_hdu(nnt, __x, k=4, **kwd):
     pass
 
 
 # for testing purpose
-def rdat(fdr='../../raw/H08_20', seed=None):
+def rdat(fdr='../../raw/W08/00_GNO'):
     # pick data file
-    np.random.seed(seed)
     fnm = np.random.choice(os.listdir(fdr))
     dat = np.load(os.path.join(fdr, fnm))
     gmx = dat['gmx'].astype('f')
@@ -151,16 +149,17 @@ def rdat(fdr='../../raw/H08_20', seed=None):
     # fix MAF > .5
     __i = np.where(gmx.sum((0, 1)) > gmx.shape[0])[0]
     gmx[:, :, __i] = 1 - gmx[:, :, __i]
-    __x = gmx.reshape(gmx.shape[0], -1)
+    __x = gmx.reshape(gmx.shape[0], -1)[:1750]
+    __u = gmx.reshape(gmx.shape[0], -1)[1750:]
 
-    # set up neral network
-    from sae import SAE
-    # from exb import Ods
-    dim = __x.shape[-1]
-    # dim = [dim] + [int(dim/2**_) for _ in range(-2, 32) if 2**_ <= dim]
-    dim = dim = [dim, dim * 2]
-    nnt = SAE.from_dim(dim)
-    # nnt[-1].shp = S(1.0, 'Shp')
+    return {'__x': __x, '__u': __u}
 
-    dat = {'__x': __x, 'nnt': nnt, 'gmx': gmx}
-    return dat
+
+def main():
+    d = rdat()
+    x, u = d['__x'], d['__u']
+    t, d = [], x.shape[-1] * 8
+    for i in range(0, 10):
+        t.append(Tnr(SAE.from_dim([x.shape[-1], d]), x, u=u))
+        d = d/2
+    return t

@@ -30,10 +30,11 @@ def CE(y, z=None):
     The first dimension denotes the sampling units, and the last
     dimension denotes the value.
     """
-    u = -(z * T.log(y) + (1-z) * T.log(1-y)) if z else -T.log(1-y)
-    return T.sum((u), -1)
+    u = T.nnet.binary_crossentropy(y, z) if z else T.nnet.binary_crossentropy(y, y)
+    # u = -(z * T.log(y) + (1-z) * T.log(1-y)) if z else -T.log(1-y)
+    return T.sum(u, -1)
 
-
+    
 def L2(y, z=None):
     """ build symbolic expression of L2 norm
     y: predicted value

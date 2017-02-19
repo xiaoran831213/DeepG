@@ -104,3 +104,10 @@ sim
 # symbolic links
 src/dsg.R
 src/hwu.R
+
+# latex temporary files
+*.aux
+*.bbl
+*.blg
+*.out
+rpt/*.pdf

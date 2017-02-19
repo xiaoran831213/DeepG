@@ -37,11 +37,11 @@ class SAE(Cat):
         super(SAE, self).__init__(nts)
 
     @staticmethod
-    def from_dim(dim):
+    def from_dim(dim, **kwd):
         """ create SAE by specifying encoding dimensions
         dim: a list of encoding dimensions
         """
-        AEs = [AE(d) for d in zip(dim[:-1], dim[1:])]
+        AEs = [AE(d, **kwd) for d in zip(dim[:-1], dim[1:])]
         return SAE(AEs)
 
     def sub(self, depth, start=None, copy=False):

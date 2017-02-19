@@ -204,7 +204,11 @@ class Base(object):
         for k, v in self.__dict__.items():
             if k.startswith('__') or k in skip:
                 continue
+            # possible theano shared cpu variable
             if isinstance(v, type(self.lmd)) and v.ndim < 1:
+                hd.append((k, v.get_value))
+            # possible theano shared gpu variable
+            if isinstance(v, type(self.ep)) and v.ndim < 1:
                 hd.append((k, v.get_value))
             if isinstance(v, type(self.step)):
                 hd.append((k, v))
@@ -266,7 +270,7 @@ class Base(object):
         if r['gsup'] < 5e-7:
             self.hlt.set_value(1)  # convergence
             return True
-        if r['lrt'] < 5e-7:
+        if r['lrt'] < 5e-12:
             self.hlt.set_value(3)  # non-convergence
             return True
         if r['terr'] < self.hte.get_value():  # early stop

@@ -56,13 +56,25 @@ class Pcp(Nnt):
         # converted using asarray to dtype
         # theano.config.floatX so that the code is runable on GPU
         """
+        # the activation function, the defaut is sigmoid
+        if s is None:
+            s = T.nnet.sigmoid
+        self.s = s
+
         if w is None:
-            w = np.asarray(
-                self.__nrng__.uniform(
+            if s is T.nnet.softplus:
+                print('w initialized for softplus')
+                w = self.__nrng__.normal(0, np.sqrt(1.0/dim[0] + 1.0/dim[1]), dim)
+            elif s is T.nnet.sigmoid:
+                print('w initialized for sigmoid')
+                w = self.__nrng__.uniform(
                     low=-4 * np.sqrt(6. / (dim[0] + dim[1])),
                     high=4 * np.sqrt(6. / (dim[0] + dim[1])),
-                    size=dim))
+                    size=dim)
+            else:
+                w = self.__nrng__.normal(0, np.sqrt(1/sum(dim)), dim)
             w = S(w, 'w')       # <f4 by default
+                
 
         if b is None:
             b = np.zeros(dim[1])
@@ -81,12 +93,9 @@ class Pcp(Nnt):
 
         # shape of the activation, larger means steeper activation
         # function. the default is constant 1.
-        self.shp = kwd.get('shp', 1.0)
-
-        # the activation function, the defaut is sigmoid
-        if s is None:
-            s = T.nnet.sigmoid
-        self.s = s
+        shp = kwd.get('shp', 1.0)
+        shp = None if shp == 1.0 else C(shp, 'Shp', 'f')
+        self.shp = shp
 
     # a perceptron is represented by the nonlinear funciton and dimensions
     def __repr__(self):
@@ -102,27 +111,34 @@ class Pcp(Nnt):
         # linear recombination of input signals
         _ = T.dot(x, self.w) + self.b
 
-        # cross bars to dertermine which level the output is located
-        if self.lvl > 2:
-            from scipy.stats import norm
-            bar = norm.ppf(np.linspace(0, 1, self.lvl+1))[1:self.lvl]
-            bar = bar.reshape(self.lvl - 1, 1, 1).astype('f')
-            _ = _ - C(bar, 'Bar')
-            self.bar = bar
+        # sigmoid activation
+        if self.s is T.nnet.sigmoid:
+            # cross bars to dertermine which level the output is located
+            if self.lvl > 2:
+                from scipy.stats import norm
+                bar = norm.ppf(np.linspace(0, 1, self.lvl+1))[1:self.lvl]
+                bar = bar.reshape(self.lvl - 1, 1, 1).astype('f')
+                _ = _ - C(bar, 'Bar')
+                self.bar = bar
 
-        # apply shape, larger means steeper
-        if hlp.is_tshr(self.shp):
-            _ = _ * self.shp
-        elif self.shp != 1.0:
-            _ = _ * C(self.shp, 'Shp')
-
-        # activation happens here
-        if callable(self.s):
+            # apply shape, larger means steeper
+            if self.shp is not None:
+                _ = _ * self.shp
+            
+            # activation
             _ = self.s(_)
 
-        # sum over levels, standardize to [0, 1]
-        if self.lvl > 2:
-            _ = T.sum(_, 0) / C(self.lvl - 1, 'L-1')
+            # sum over levels, standardize to [0, 1]
+            if self.lvl > 2:
+                _ = T.sum(_, 0) / C(self.lvl - 1, 'L-1')
+
+        # softplus activation
+        if self.s is T.nnet.softplus:
+            if self.shp is not None:
+                _ = self.s(_ * self.shp) / self.shp
+            else:
+                _ = self.s(_)
+            
         return _
 
     def __free_energy__(self, x, family='b'):

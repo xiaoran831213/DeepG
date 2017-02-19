@@ -81,14 +81,14 @@
 \newcommand{\WDi}{\WDC_i^{d_i \times d_{i+1}}} % decoder layer #i
 \newcommand{\WDI}[3]{\WDC_{#1}^{d_{#2} \times d_{#3}}} % decoder layer #i
 \newcommand{\WDIt}[3]{\WDC_{#1}^{d_{#2} \times d_{#3}\prime}} % decoder layer #i
-
+%
 % the w vector
 \newcommand{\wEC}{\vecEC{w}}    % generic encoder
 \newcommand{\wEI}[2]{{\wEC_{#1}^{1 \times d_{#2}}}}
 \newcommand{\wDC}{\vecDC{w}}    % generic decoder
 \newcommand{\wDI}[2]{{\wDC_{#1}^{1 \times d_{#2}}}}
 \newcommand{\wDIt}[2]{{\wDC_{#1}^{1 \times d_{#2}\prime}}}
-
+%
 % the b vector
 \newcommand{\bEC}{\vecEC{b}}    % generic encoder
 \newcommand{\bEi}{\bEC_i^{d_i}} % encoder layer i
@@ -96,7 +96,7 @@
 \newcommand{\bDC}{\vecDC{b}}    % generic decoder
 \newcommand{\bDi}{\bDC_i^{d_i}} % encoder layer i
 \newcommand{\bDI}[2]{\bDC_{#1}^{d_{#2}}} % encoder layer i
-
+%
 % the x vector
 \newcommand{\xEC}{\vecEC{x}}
 \newcommand{\xDC}{\vecDC{x}}
@@ -146,6 +146,15 @@
 %
 % assign to diagnoral
 \newcommand{\diag}[1]{\text{diag} (#1)}
+%
+% likelihood and log likelihood
+\newcommand{\lkh}{\mathcal{L}}
+\newcommand{\llk}{\mathcal{l}}
+%
+% declarations
+% argument of the minimum / maximum
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator*{\argmax}{arg\,max}
 
 % \pagestyle{headings}
 
@@ -183,41 +192,90 @@ The simulation and real data analysis are conducted using the NGS and neuroimagi
 \section*{Methods}
 
 \subsection*{Restricted Boltzmann Machine}
-The Restricted Boltzmann Machine (RBM) is an engergy based model that treats the observed data as the visible portion of the states existing in a physics system. Besides the $P$ visible units from the observation, denoted by vector $\vv$, a state in such a system also contains $Q$ unobserved hidden unites denoted by $\vh$. The visible and hidden units are fully connected, but are not connected within themselves, as shown in Figure \ref{fig:rbm}.
+The Restricted Boltzmann Machine (RBM) is an engergy based model that views the observed data as the visible fraction of a physics system. For a Boltzmann Machine, besides the $P$ visible units displaying the observed data, denoted by vector $\vv$, it also maintains $Q$ hidden unites holding unobserved information, denoted by $\vh$. All units are fully connected from each other in a Boltzmann Machine, the term ``Restricted'' highlights the additional constraint that all visible units should be linked to hidden units and vise vasa, but no connection should occure among visible or hidden units, as Figure \ref{fig:rbm} illustrates.
 \begin{figure}[!htbp]
   \centering
   \includegraphics[width=100px]{img/rbm.png}
   \caption{The Restricted Boltzmann Machine.}\label{fig:rbm}
 \end{figure}
-Together $\vv$ and $\vh$ comprise a system state $(\vv, \vh)$, and by analogy of a physics system, every configuration of $(\vv, \vh)$ has its own energy, which is the exponential of the negative potential $-E(\vv, \vh)$:
-\begin{equation*}
-  energy(\vv, \vh) = e^{-E(\vv, \vh)}.
-\end{equation*}
-The exact function form of potential $E(\vv, \vh)$ is designed to suit specifit characteristic of the sytem and to ease the computation, which will be discussed later. Now to continue the analyog of physics that says the states of lower energy are more prevalent, while rarer states require higher energy, we assign probability to each distinctive state $(\vv, \vh)$ according to its energy $e^{-E(\vv, \vh)}$:
+Together the values $\vv$ and $\vh$ presented at any monment comprise a system state $(\vv, \vh)$, and the formation of each configuration of $(\vv, \vh)$ has an energy $E(\vv, \vh)$ reading that dictate its frequency in the physics system, in such a way that low energy states being prevalent while rare states require high energy. The exact funtion form of engergy $E(\vv, \vh)$ is choosen to suit specific characteristic of the sytem and to ease the computation, which will be discussed later. Now following the insperation of physics, we assign probability to each distinct state $(\vv, \vh)$ that is proportional to the exponential of its negative energy,
 \begin{equation} \label{eq:prob0}
   \begin{split}
     \Pr(\vv, \vh) = \frac{e^{-E(\vv, \vh)}}{Z}, \quad Z = \int_{\vv,\vh}{e^{-E(\vv, \vh)}d(\vv, \vh)},
   \end{split}
 \end{equation}
-thus high engery requirement deter a state from occurring while low engery does encourages it. The partition function $Z$ is the integral of energy over distinct states, which is the normalizing constant of the Boltzmann distribution with density $\Pr(\vv, \vh)$. In such a system, the likelihood of obtaining a sample $\vvt$, that is, one of the assignment of visible units, is the marginal probability of $\Pr(\vvt, \vh)$ over $\vh$, that is,
+which result in a Boltzmann distribution that encourages low engery states while deter the high engery ones, with the partition function $Z$ being its the normalizing constant. In such a system, the likelihood of obtaining a particular sample $\vvt$, that is, one of the assignment on the visible units, is the marginal probability of $\vvt$ over all assignments on hidden units $\vh$, that is,
 \begin{equation} \label{eq:probv}
   \begin{split}
-    \Pr(\vvt) = \int_{\vh}{\Pr(\vvt, \vh)d\vh} = \frac{1}{Z} \int_{\vh}{e^{-E(\vvt, \vh)}d\vh}
+    \Pr(\vvt) = \int_{\vh}{\Pr(\vvt, \vh)d\vh} = \frac{1}{Z} \int_{\vh}{e^{-E(\vvt, \vh)}d\vh}.
   \end{split}
 \end{equation} 
-The modeling objective is to find the system that miximizes the overall likelihood of seeing $N$ samples of the data, $\mD=[\vv_1^\prime, \vv_2^\prime, \dots, \vv_N^\prime]$, which in the log scale is
-\begin{equation} \label{eq:objective}
+Our objective is to come up with a system that maximizes the overall likelihood of seeing the $N$ samples of the data, $\mD=[\vv_1, \vv_2, \dots, \vv_N]^{\prime}$, which is typically done via negative gradient guided optimization of log likelihood. Since the behavior of the system is determined by the engergy function $E(\vv, \vh)$, which is further structured by a set of parameters $\pEC$, we will calibrated $\pEC$ to maximize the log likelihood, that is, the chance of the system giving rise to the sample $\mD$ on its visible units. For one particular sample $\vvt$, the negative gradient of the log likelihood $\tilde{l}$ with respect to the parameters $\pEC$ is
+\begin{equation*}
+  -\PDV{\tilde{l}}{\pEC} = -\PDV{\log{\Pr(\vvt)}}{\pEC} = -\PDV{\log{\int_{\vh}{e^{-E(\vvt, \vh)}}{d\vh}}}{\pEC} + \PDV{\log{Z}}{\pEC}, 
+\end{equation*}
+\begin{equation*}
   \begin{split}
-    l(\mD) &= \sum_{k=1}^N{\log{\Pr(\vv_k)}} \\
-    &= \sum_{k=1}^N{[\log{\int_{\vh}{e^{-E(\vv, \vh)}d\vh}} - \log{Z}]}
+    \PDV{\log{Z}}{\pEC} &= \frac{1}{Z}
+    \PDV
+    {
+      \int_{\vv}
+      {
+        \int_{\vh} {e^{-E(\vv, \vh)}} {d\vh}
+      }{d\vv}
+    }{\pEC} \\
+    &= \frac{1}{Z}
+    \int_{\vv}
+    {
+      \PDV
+      {
+        \int_{\vh} {e^{-E(\vv, \vh)}} {d\vh}\,
+      }{\pEC}
+    }{d\vv} \\ 
+    &= \int_{\vv}
+    {
+      \frac{1}{Z} 
+      \int_{\vh} {e^{-E(\vv, \vh)}} {d\vh}
+      \PDV
+      {
+        \log
+        {
+          \int_{\vh} {e^{-E(\vv, \vh)}} {d\vh}
+        }
+      }{\pEC}
+    }{d\vv} \qquad \DRV{y}{x} = y \DRV{\log{y}}{x} \\
+    &= \int_{\vv}
+    {
+      \Pr(\vv) \PDV
+      {
+        \log
+        {
+          \int_{\vh} {e^{-E(\vv, \vh)}} {d\vh}
+        }
+      }{\pEC}
+    }{d\vv} \qquad (\ref{eq:probv})
+  \end{split}
+\end{equation*}
+\begin{equation}\label{eq:grad}
+  \begin{split}
+    -\PDV{\tilde{l}}{\pEC} &= -\PDV{\log{\int_{\vh}{e^{-E(\vvt, \vh)}d\vh}}}{\pEC}
+    +\int_{\vv}
+    {
+      \Pr(\vv) \PDV
+      {
+        \log
+        {
+          \int_{\vh} {e^{-E(\vv, \vh)}} {d\vh}
+        }
+      }{\pEC}
+    }{d\vv}
   \end{split}
 \end{equation}
-For now we limit our discussion on binary systems, that is, $v$ and $h$ take values from \{0, 1\}, the potential function $E(v, h)$ uses the following form:
+For now we limit our discussion on binary systems, that is, $v$ and $h$ take values from \{0, 1\}, the potential function $E(\vv, \vh)$ uses the following form:
 \begin{equation} \label{eq:energy}
-  E(\vv, \vh) = -\bs{b}^\prime \vv - \bs{c}^\prime \vh - \vh^\prime \bs{W} \vv,
+  E(\vv, \vh) = -\vb^\prime \vv - \vc^\prime \vh - \vh^\prime \mW \vv,
 \end{equation}
-where the entries in P-vector $\bs{b}$ dictates the negative energy contributed to the system when the cooresponding visible units in $\vv$ are turned on (i.e., taking value 1), thus larger $b_i, (i=1, \dots, P)$ means more energy drained when $v_.i$ is on, making states with $v_i=1$ relatively more predominant. The Q-vector $\bs{c}$'s entries are interpreted in the same manner, that is, larger $c_.j, (j=1, \dots, Q)$ promotes states with active $h_{.j}$. The entries in the weight matrix $\bs{W}$ determines the connection between pairs of visible and hidden unit, visualized as the edges in Figure \ref{fig:rbm}. A large $W_{ij}$ either encourages (when positive) or prohibits (when negative) co-activation of $v_{.i}$ and $h_{.j}$, while a small $W_{ij}$ diminish inter-dependency of the two units. 
-
+where the entries in the P-vector $\vb$ dictates the negative energy contributed to the system when the cooresponding visible units in $\vv$ are turned on (i.e., taking value 1), that is, larger $b_i, (i=1, \dots, P)$ drains more engery when $v_i$ is on, making states with $v_i=1$ relatively more predominant. The Q-vector $\bs{c}$'s entries can be interpreted in the same manner, that is, larger $c_j, (j=1, \dots, Q)$ promotes states with active $h_j$. The entries in the weight matrix $\mW$ determine the connection between pairs of visible and hidden units, visualized by the edges in Figure \ref{fig:rbm}. A large $W_{ij}$ either encourages (when positive) or prohibits (when negative) co-activation of $v_i$ and $h_j$, while a small $W_{ij}$ diminishing mutual dependency of the two.
 
 \subsection*{Processing Genomic Profile with Stacked Autoencoder}
 \xacc{Rooted in Artificial Intellegence (AI), a Stacked Autoencoder (SA) is a type of artificial neural network mimicking visual processing that abstracts high order features from a raw image, which are far more relevant to the decision making of a sentient being than the exact pixel values in the original image. As a physician, knowing the exact thickness and curvature of every point in the 3D cortex image does not help the diagnosis of neurodegenerative disorders, instead, being able to recognize general location, size and shape of the laceration sites in the same cortex image significantly boost the sensitivity and specificity of his judgement. Thus, by learning high order features with the SA while disregarding trivial and redundant details, we expect to achieve a power boost in a subsequent association analysis, given that these features are appropriate for replacing the unprocessed imaging profile.}

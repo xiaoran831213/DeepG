@@ -63,16 +63,19 @@ def main(fnm='../../raw/W09', **kwd):
 
     # load data from {fnm}, also do some fixing:
     fdt = dict(np.load(fnm))
-    gmx = fdt['gmx']
+    gmx = fdt['gmx'].astype('f')  # fix data type
 
-    # mark some untyped subjects
-    usb = kwd.get('usb', 1.0)
+    # dosage format and training format
+    dsg = gmx.sum(-2, dtype='<i4')
+
+    # mark some untyped subjects (hold out)
+    usb = kwd.get('usb', 0.0)
     __i = np.random.choice(gmx.shape[+0], usb * gmx.shape[+0], False)
     usb = np.zeros(gmx.shape[+0], 'u1')
     usb[__i] = 1
 
     # mark some variants as untyped, if requested
-    ugv = kwd.get('ugv', 1.0)
+    ugv = kwd.get('ugv', 0.0)
     __i = np.random.choice(gmx.shape[-1], ugv * gmx.shape[-1], False)
     ugv = np.zeros(gmx.shape[-1], 'u1')
     ugv[__i] = 1
@@ -82,11 +85,11 @@ def main(fnm='../../raw/W09', **kwd):
     kwd['ugv'] = ugv        # untyped variant mask
 
     # training data
-    xmx = gmx[usb == 0, :, :][:, :, ugv == 0].astype('f')
+    xmx = gmx[usb == 0, :, :][:, :, ugv == 0]
     xmx = xmx.reshape(xmx.shape[0], -1)
 
     # options in {kwd} takes precedence over those loaded from {fnm}
-    fdt.update(kwd, gmx=gmx, xmx=xmx)
+    fdt.update(kwd, gmx=gmx, dsg=dsg, xmx=xmx)
     kwd = fdt
 
     # check saved progress and overwrite options:
@@ -101,9 +104,6 @@ def main(fnm='../../raw/W09', **kwd):
         # continue with the progress, new data in xmx can be used
         if ovr is 1:
             sdt = lpz(sav)
-            kwd.pop('cvk', None)  # use saved K
-            kwd.pop('cvm', None)  # use saved CV masks
-            kwd.pop('cvw', None)  # use saved CV networks
             kwd.pop('nwk', None)  # use saved network
 
             # options in keywords take precedence over saved ones
@@ -116,27 +116,13 @@ def main(fnm='../../raw/W09', **kwd):
             print("restart training.")
     kwd['sav'] = sav
 
-    # cross-validation
-    cvk = kwd.get('cvk', 2)                # K
-    cvm = kwd.get('cvm', cv_msk(xmx, cvk))  # CV mask
-    kwd.update(cvk=cvk, cvm=cvm)
-
     # create neural networks if necessary
     dim = xmx.shape[-1]
     dim = [dim] + [int(dim/2**_) for _ in range(1, 16) if 2**_ <= dim]
-    if kwd.get('cvw') is None:  # for cross-validation
-        kwd['cvw'] = [SAE.from_dim(dim) for _ in range(cvk)]
-    if kwd.get('nwk') is None:  # for normal training
+    if kwd.get('nwk') is None:
         kwd['nwk'] = SAE.from_dim(dim)
 
     # do the pre-training:
-    # for CV,
-    for i, m in enumerate(cvm):
-        print('CV: {:02d}/{:02d}'.format(i+1, cvk))
-        kwd = gdy_sae(kwd['cvw'][i], xmx[-m], xmx[+m], **kwd)
-
-    # for normal training
-    print('NT:')
     kwd = gdy_sae(kwd['nwk'], xmx, xmx, **kwd)
 
     # save the progress

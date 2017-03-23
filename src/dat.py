@@ -34,12 +34,21 @@ def rseq(wnd=256, dir='haf', sav=None, seed=None):
     # draw genomic data
     chr = np.random.randint(22) + 1
     vcf = '{}/{:02d}.vcf.gz'.format(dir, chr)
-    bp0 = np.random.randint(2^31)
+    bp0 = np.random.randint(2 ^ 31)
 
     itr = DsgVsq(vcf, bp0=bp0, wnd=wnd, dsg=None)
 
     # genomic matrix
     gmx = next(itr)
+
+    # fix MAF
+    __i = np.where(gmx.sum((0, 1)) > gmx.shape[0])[0]
+    gmx[:, :, __i] = 1 - gmx[:, :, __i]
+
+    # fix copy (cpy0 >= cpy1).all() = True
+    __i = np.where(gmx[:, 0, :] < gmx[:, 1, :])
+    gmx[:, 0, :][__i] = 1
+    gmx[:, 1, :][__i] = 0
 
     # subjects
     sbj = np.array(itr.sbj(), dtype='S16')

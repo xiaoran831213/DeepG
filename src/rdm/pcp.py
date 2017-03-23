@@ -1,13 +1,14 @@
 import numpy as np
 try:
-    from . import hlp
     from .hlp import S, C
     from .nnt import Nnt
+    import exb
 except ValueError:
-    import hlp
     from hlp import S, C
     from nnt import Nnt
+    import exb
 from theano import tensor as T
+from theano import scan as sc
 
 
 class Pcp(Nnt):
@@ -56,51 +57,70 @@ class Pcp(Nnt):
         # converted using asarray to dtype
         # theano.config.floatX so that the code is runable on GPU
         """
-        # the activation function, the defaut is sigmoid
+        # the activation/squarshing function, the defaut is sigmoid
         if s is None:
-            s = T.nnet.sigmoid
-        self.s = s
+            s = 'sigmoid'
+        self.s = str(s).lower()
+
+        # levels of the output, the defaut is 2 (binary data)
+        lvl = kwd.get('lvl', 2)
+
+        # category of the output, for softmax squarsh only
+        cat = kwd.get('cat', 2)
 
         if w is None:
-            if s is T.nnet.softplus:
-                print('w initialized for softplus')
-                w = self.__nrng__.normal(0, np.sqrt(1.0/dim[0] + 1.0/dim[1]), dim)
-            elif s is T.nnet.sigmoid:
-                print('w initialized for sigmoid')
+            if s in ['softplus', 'relu']:
+                print('Initalize w for', s)
+                w = self.__nrng__.normal(
+                    0, np.sqrt(1.0/dim[0] + 1.0/dim[1]), dim)
+            elif s == 'sigmoid':
+                print('Initalize w for', s)
                 w = self.__nrng__.uniform(
                     low=-4 * np.sqrt(6. / (dim[0] + dim[1])),
                     high=4 * np.sqrt(6. / (dim[0] + dim[1])),
                     size=dim)
+            elif s == 'softmax':
+                print('Initialize w for softmax', cat)
+                w = self.__nrng__.uniform(
+                    low=-4 * np.sqrt(6. / (dim[0] + dim[1])),
+                    high=4 * np.sqrt(6. / (dim[0] + dim[1])),
+                    size=(cat, dim[0], dim[1]))
             else:
-                w = self.__nrng__.normal(0, np.sqrt(1/sum(dim)), dim)
-            w = S(w, 'w')       # <f4 by default
-                
+                print('Initialize w for affine')
+                w = self.__nrng__.normal(
+                    0, np.sqrt(1.0/dim[0] + 1.0/dim[1]), dim)
+            w = S(w, 'w')
 
         if b is None:
-            b = np.zeros(dim[1])
+            if s == 'softmax':
+                b = np.zeros((1, cat, dim[1]))
+            else:
+                b = np.zeros(dim[1])
             b = S(b, 'b')
 
         if c is None:
-            c = np.zeros(dim[0])
+            if s == 'softmax':
+                c = np.zeros((1, cat, dim[1]))
+            else:
+                c = np.zeros(dim[1])
             c = S(c, 'c')
-            
-        self.w = w  # weight matrix
-        self.b = b  # offset on output (bias of the hidden)
-        self.c = c  # offset on bottom (bias of the visible)
 
-        # levels of the output, the defaut is 2 (binary data)
-        self.lvl = kwd.get('lvl', 2.0)
+        # shape of the activation function.
+        shp = kwd.get('shp', None)
+        if shp is not None:
+            shp = S(shp, 'Shp', 'f')
 
-        # shape of the activation, larger means steeper activation
-        # function. the default is constant 1.
-        shp = kwd.get('shp', 1.0)
-        shp = None if shp == 1.0 else C(shp, 'Shp', 'f')
-        self.shp = shp
+        self.w = w            # weight matrix
+        self.b = b            # offset on output (bias of the hidden)
+        self.c = c            # offset on bottom (bias of the visible)
+        self.shp = shp        # shape
+        self.lvl = lvl        # output level
+        self.cat = cat        # output categorys
 
     # a perceptron is represented by the nonlinear funciton and dimensions
     def __repr__(self):
-        return '{}({}x{})'.format(
-            str(self.s)[0].upper(), self.dim[0], self.dim[1])
+        L = {'softmax': 'M', 'sigmoid': 'S', 'relu': 'R', 'softplus': 'P'}
+        return '{}({}x{})'.format(L.get(self.s, ""), self.dim[0], self.dim[1])
 
     def __expr__(self, x):
         """ build symbolic expression of {y} given {x}.
@@ -108,11 +128,19 @@ class Pcp(Nnt):
         input elements and an bias(or intercept), followed by an
         element-wise non-linear transformation(usually sigmoid)
         """
-        # linear recombination of input signals
+        # affine transformation of inputs
+        # dim(:) = d_1, dim(m) = d_2
+        # 1) _[n, c, m] = x[n, :   ]' * w[c, :, m]
+        # 2) _[n, c, m] = _[n, c, m]  + b[*, c, m]
         _ = T.dot(x, self.w) + self.b
 
-        # sigmoid activation
-        if self.s is T.nnet.sigmoid:
+        # the linear part of the reference category, which is always 0.
+        # if callable(self.s) and self.s is T.nnet.softmax:
+        # z = T.zeros((x.shape[0], 1, self.dim[1]))
+        # _ = T.concatenate((z, _), 1)
+
+        # activation / squashing
+        if self.s == 'sigmoid':
             # cross bars to dertermine which level the output is located
             if self.lvl > 2:
                 from scipy.stats import norm
@@ -124,20 +152,30 @@ class Pcp(Nnt):
             # apply shape, larger means steeper
             if self.shp is not None:
                 _ = _ * self.shp
-            
+
             # activation
-            _ = self.s(_)
+            _ = exb.sigmoid(_)
 
             # sum over levels, standardize to [0, 1]
             if self.lvl > 2:
-                _ = T.sum(_, 0) / C(self.lvl - 1, 'L-1')
+                _ = T.sum(_, 0) / C(self.lvl - 1, 'f', 'L-1')
 
         # softplus activation
-        if self.s is T.nnet.softplus:
+        if self.s == 'softplus':
             if self.shp is not None:
                 _ = self.s(_ * self.shp) / self.shp
             else:
-                _ = self.s(_)
+                _ = exb.softplus(_)
+
+        # softmax
+        if self.s == 'softmax':
+            v = T.transpose(_, (0, 2, 1))
+            _, u = sc(exb.softmax, sequences=[v])
+            _ = T.transpose(_, (0, 2, 1))
+
+        # relu activation
+        if self.s == 'relu':
+            _ = exb.relu(_, self.shp)
             
         return _
 

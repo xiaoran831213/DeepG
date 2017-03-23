@@ -18,6 +18,7 @@ def ftn_sae(w, x, u=None, gdy=False, ae0=None, ae1=None, **kwd):
     x: the inputs.
 
     nft: maximum number of epochs to go through for fine-tuning.
+    gdy: number of greedy layer-wise pre-training.
     ae0: which autoencoder in the stack to start the tuning?
     ae1: which autoencoder in the stack to end the tuning?
 
@@ -42,7 +43,7 @@ def ftn_sae(w, x, u=None, gdy=False, ae0=None, ae1=None, **kwd):
             sw = w.sub(i + 1, 0)
             print('stack:', sw)
             ftn = Tnr(sw, x, u=u, lrt=lrt, hte=hte, **kwd)
-            ftn.tune(50)
+            ftn.tune(gdy)
             
     # whole stack training
     ftn = Tnr(w, x, u=u, lrt=lrt, hte=hte, **kwd)
@@ -54,7 +55,7 @@ def ftn_sae(w, x, u=None, gdy=False, ae0=None, ae1=None, **kwd):
     return kwd
 
 
-def main(fnm='../../raw/W09/1001', sav='../../dat', **kwd):
+def main(fnm='../../raw/W09/1004', **kwd):
     """ the fine-tune procedure for Stacked Autoencoder(SAE).
 
     -- fnm: pathname to the input, supposingly the saved progress after the
@@ -65,7 +66,7 @@ def main(fnm='../../raw/W09/1001', sav='../../dat', **kwd):
     """
     new_lrt = kwd.pop('lrt', None)  # new learning rate
     new_hte = kwd.pop('hte', None)  # new halting error
-    
+
     # randomly pick data file if {fnm} is a directory and no record
     # exists in the saved progress:
     if pt.isdir(fnm):
@@ -76,7 +77,7 @@ def main(fnm='../../raw/W09/1001', sav='../../dat', **kwd):
     kwd.update((k, v) for k, v in lpz(fnm).iteritems() if k not in kwd.keys())
 
     # check saved progress and overwrite options:
-    sav = kwd.get('sav', pt.basename(fnm).split('.')[0])
+    sav = kwd.get('sav', '.')
     if pt.isdir(sav):
         sav = pt.join(sav, pt.basename(fnm).split('.')[0])
     if pt.exists(sav + '.pgz'):
@@ -104,10 +105,10 @@ def main(fnm='../../raw/W09/1001', sav='../../dat', **kwd):
         kwd = sdt
         print("continue training.")
     else:  # restart the training
-        kwd['lrt'] = new_lrt    # do not use archived NT LRT
-        kwd.pop('cvl', None)  # do not use archived CV LRT
-        kwd.pop('cve', None)  # do not use archived CV errors
-        kwd.pop('cvh', None)  # do not use archived CV halting state
+        kwd.pop('lrt', None)    # do not use archived NT LRT
+        kwd.pop('cvl', None)    # do not use archived CV LRT
+        kwd.pop('cve', None)    # do not use archived CV errors
+        kwd.pop('cvh', None)    # do not use archived CV halting state
         print("restart training.")
 
     # <-- __x, w, npt, ptn, ... do it.
@@ -138,12 +139,13 @@ def main(fnm='../../raw/W09/1001', sav='../../dat', **kwd):
 
         print(msg)
         if cvw[i] is None:
-            cvw[i] = SAE.from_dim(dim, **kwd)
-
-            # suggest layer-wise treatment
-            gdy = kwd.get('gdy', True)
+            cvw[i] = SAE.from_dim(dim, s='relu', **kwd)
+            cvw[i][-1].s = 'sigmoid'
+            
+            # suggest no layer-wise treatment (relu)
+            gdy = kwd.get('gdy', False)
         else:
-            # not suggest layer-wise treatment
+            # suggest no layer-wise treatment
             gdy = kwd.get('gdy', False)
         kwd = ftn_sae(cvw[i], xmx[-m], xmx[+m], gdy=gdy, lrt=cvl[i], **kwd)
 
@@ -157,18 +159,24 @@ def main(fnm='../../raw/W09/1001', sav='../../dat', **kwd):
     kwd.update(cvk=cvk, cvm=cvm, cvh=cvh, cvl=cvl, cve=cve, cvw=cvw)
 
     # (2) normal training
+    # force continue of training till new halting error?
+    if new_hte:
+        [kwd.pop(_, None) for _ in ['hte', 'hof', 'eot', 'eov']]
+        hte = new_hte
+    else:
+        # mean CV training error as halting error
+        hte = kwd.pop('hte', cve[:, 0].mean())
+        
     # NT only happens when all CV is halted.
     if all(cvh) and 'hof' not in kwd:
-        # mean CV training error as halting error
-        hte = new_hte if new_hte else cve[:, 0].mean()
-
         # create normal network if necessary
         nwk = kwd.pop('nwk', None)
         if nwk is None:
-            nwk = SAE.from_dim(dim, **kwd)
+            nwk = SAE.from_dim(dim, s='relu', **kwd)
+            nwk[-1].s = 'sigmoid'
 
-            # suggest layer-wise treatment
-            gdy = kwd.get('gdy', True)
+            # suggest no layer-wise treatment (relu)
+            gdy = kwd.get('gdy', False)
         else:
             # suggest no layer-wise treatment
             gdy = kwd.get('gdy', False)
@@ -179,11 +187,13 @@ def main(fnm='../../raw/W09/1001', sav='../../dat', **kwd):
         lrt = ftn.lrt.get_value()  # learning rate
 
         # update
-        kwd.update(nwk=nwk, lrt=lrt)
+        kwd.update(nwk=nwk, lrt=lrt, hte=hte)
 
         # when NT halt, save the high order features
         if ftn.hlt:
             kwd['hof'] = nwk.ec(xmx).eval()
+            kwd['eot'] = ftn.terr()
+            kwd['eov'] = ftn.verr()
             print('NT: halted.')
     elif all(cvh) and 'hof' in kwd:
         print('NT: halted.')
@@ -199,10 +209,10 @@ def main(fnm='../../raw/W09/1001', sav='../../dat', **kwd):
     return kwd
 
 
-def ept(fnm='../../sim/W09/SS1_DP5/0004.pgz', out=None):
+def ept(fnm, out=None):
     """ Export training result in text format.
     -- fnm: filename of training progress.
-    -- out: where to export the progress.
+    -- out: where to save the export.
     """
     pwd = os.getcwd()
     fnm = pt.abspath(fnm)
@@ -240,6 +250,10 @@ def ept(fnm='../../sim/W09/SS1_DP5/0004.pgz', out=None):
 
     # untyped variants (indices)
     # np.savetxt(pt.join(tpd, 'ugv.txt'), dat.pop('ugv'), '%d')
+
+    # CV-errors
+    cve = dat.pop('cve')
+    np.savetxt(pt.join(tpd, 'cve.txt'), cve, '%.8f')
 
     # high-order features
     hof = dat.pop('hof')

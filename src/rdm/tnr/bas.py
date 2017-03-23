@@ -68,8 +68,15 @@ class Base(object):
         # the validation disruption
         self.vdr = S(kwd.get('vdr'), 'VDR')
 
-        # the stopping training error
-        self.hte = S(kwd.get('hte', .005), 'HTE')
+        # the denoising
+        self.dns = S(kwd.get('dns'), 'DNS')
+
+        # the halting rules, and halting status
+        self.hte = kwd.get('hte', 1e-3)  # 1. low training error
+        self.hgd = kwd.get('htg', 1e-7)  # 2. low gradient
+        self.hlr = kwd.get('hlr', 1e-7)  # 3. low learning rate
+        self.hvp = kwd.get('hvp', 0100)  # 4. out of validation patients
+        self.hlt = 0
 
         # current epoch index, use int64
         self.ep = S(0, 'EP')
@@ -81,12 +88,6 @@ class Base(object):
         # current batch index, use int64
         self.bt = S(0, 'BT')
 
-        # has the training been halt for a number of reasons?
-        # 1: due to converge.
-        # 2: due to rising validation error (early stop rule).
-        # 3: fail to converge?
-        self.hlt = S(0, 'HLT')
-
         # momentumn, make sure momentum is a sane value
         mmt = kwd.get('mmt', .0)
         self.mmt = S(mmt, 'MMT')
@@ -95,13 +96,13 @@ class Base(object):
         lrt = kwd.get('lrt', 0.01)  # learning rate
         acc = kwd.get('acc', 1.04)  # acceleration
         dec = kwd.get('dec', 0.85)  # deceleration
-        self.lrt = S(lrt, 'LRT')
-        self.acc = S(acc, 'ACC')
-        self.dec = S(dec, 'DEC')
+        self.lrt = S(lrt, 'LRT', 'f')
+        self.acc = S(acc, 'ACC', 'f')
+        self.dec = S(dec, 'DEC', 'f')
 
         # weight decay, lambda
         lmd = kwd.get('lmd', .0)
-        self.lmd = S(lmd, 'LMD')
+        self.lmd = S(lmd, 'LMD', 'f')
 
         # the neural network
         self.nnt = nnt
@@ -174,8 +175,20 @@ class Base(object):
         # 3) the trainer functions
         # expression of batch and whole data feed:
         _ = T.arange((self.bt + 0) * self.bsz, (self.bt + 1) * self.bsz)
-        bts = {x: self.x.take(_, -2, 'wrap'), y: self.y.take(_, -2, 'wrap')}
-        dts = {x: self.x, y: self.y}
+
+        # enable denoise training
+        if self.dns:
+            msk = self.__trng__.binomial(self.y.shape, 1, self.dns, dtype=FX)
+            msk = 1 - msk
+            bts = {
+                x: self.x.take(_, 0, 'wrap'),
+                y: self.y.take(_, 0, 'wrap') * msk.take(_, -2, 'wrap')}
+            dts = {x: self.x, y: self.y * msk}
+        else:
+            bts = {
+                x: self.x.take(_, 0, 'wrap'),
+                y: self.y.take(_, 0, 'wrap')}
+            dts = {x: self.x, y: self.y}
 
         # each invocation sends one batch of training examples to the network,
         # calculate total cost and tune the parameters by gradient decent.
@@ -201,7 +214,7 @@ class Base(object):
 
         # * ---------- logging and recording ---------- *
         hd, skip = [], ['step']
-        for k, v in self.__dict__.items():
+        for k, v in vars(self).items():
             if k.startswith('__') or k in skip:
                 continue
             # possible theano shared cpu variable
@@ -212,20 +225,21 @@ class Base(object):
                 hd.append((k, v.get_value))
             if isinstance(v, type(self.step)):
                 hd.append((k, v))
+            if isinstance(v, float) or isinstance(v, int):
+                hd.append((k, v))
 
         self.__head__ = hd
         self.__time__ = .0
 
-        # the initial record
+        # the initial record, and history
         self.__hist__ = [self.__rpt__()]
+        self.__mver__ = self.__hist__[-1]  # min verr
+        self.__mter__ = self.__hist__[-1]  # min terr
 
         # printing format
         self.__pfmt__ = (
-            '{ep:04d}: {tcst:.2f} = {terr:.2f} + {lmd:.2e}*{wsum:.1f}'
-            '|{verr:.2f}, {gsup:.2e}, {lrt:.2e}, {hte:.2f}')
-
-        # pass on inherited initialization.
-        # super(Base, self).__init__(*arg, **kwd)
+            '{ep:04d}: {tcst:.1e} = {terr:.1e} + {lmd:.1e}*{wsum:.1f}'
+            '|{verr:.1e}, {gsup:.2e}, {lrt:.2e}, {hte:.1e}')
 
     # -------- helper funtions -------- *
     def nbat(self):
@@ -243,38 +257,54 @@ class Base(object):
 
     def __rpt__(self):
         """ report current status. """
-        shot = [(k, f().item()) for k, f in self.__head__]
-        shot.append(('time', self.__time__))
-        return dict(shot)
+        r = dict((k, f().item()) for k, f in self.__head__ if callable(f))
+        r.update((k, v) for k, v in self.__head__ if not callable(v))
+        r['time'] = self.__time__
+        return r
 
     def __onep__(self):
         """ called on new epoch. """
-        pass
+        # update semi snap shots
+        r = self.__hist__[-1]
+        if r['verr'] < self.__mver__['verr']:  # min verr
+            self.__mver__ = r
+        if r['terr'] < self.__mter__['terr']:  # min terr
+            self.__mter__ = r
 
     def __onbt__(self):
         """ called on new batch """
         pass
 
     def __stop__(self):
-        """ return true should the training be stopped. """
+        """ return true to signal training stop. """
         # already halted?
-        if self.hlt.get_value():
+        if self.hlt:
             return True
         
-        # no training histoty, no-stopping.
+        # no training histoty, do not stop.
         if len(self.__hist__) < 1L:
             return False
 
-        # check the latest history
+        # pull out the latest history
         r = self.__hist__[-1]
-        if r['gsup'] < 5e-7:
-            self.hlt.set_value(1)  # convergence
+
+        # terr flucturation, do not stop!
+        if r['terr'] > self.__mter__['terr']:
+            return False
+
+        # check the latest history
+        if r['terr'] < self.hte:  # early stop on terr
+            self.hlt = 1
             return True
-        if r['lrt'] < 5e-12:
-            self.hlt.set_value(3)  # non-convergence
+        if r['gsup'] < self.hgd:  # converged
+            self.hlt = 2
             return True
-        if r['terr'] < self.hte.get_value():  # early stop
-            self.hlt.set_value(2)
+        # early stop if we run out of patient on rising verr
+        if r['ep'] - self.__mver__['ep'] > self.hvp:
+            self.hlt = 3
+            return True
+        if r['lrt'] < self.hlr:  # fail
+            self.hlt = 9
             return True
         return False
 

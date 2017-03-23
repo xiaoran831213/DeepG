@@ -19,6 +19,9 @@ class Bold(Snap, Base):
         # learning rate changes
         self.acc = S(kwd.get('acc', 1.04), 'ACC')  # acceleration
         self.dec = S(kwd.get('dec', 0.85), 'DEC')  # deceleration
+        self.bdr = kwd.get('bdr', True)            # enable bold driver?
+        # patient of waiting validation error to fall again.
+        self.bdr_patient = kwd.get('bdr_patient', 20)
 
         # initialize super class.
         super(Bold, self).__init__(*arg, **kwd)
@@ -27,7 +30,10 @@ class Bold(Snap, Base):
 
     def __onep__(self):
         """ called on new epoch. """
-        
+        if not self.bdr:
+            # super class call
+            return super(Bold, self).__onep__()
+            
         # history records
         r = self.__hist__[-1]
 
@@ -37,7 +43,6 @@ class Bold(Snap, Base):
         else:                   # slow down, and restore saved state
             self.snap('meot', 'r')
             self.lrt.set_value(self.lrt.get_value() * self.dec.get_value())
-
         self.snap('meot', 's')
 
         # update minimum validation error, also save the state
@@ -62,10 +67,11 @@ class Bold(Snap, Base):
         hlt = True
         hlt = hlt and c['verr'] > m['verr']
         hlt = hlt and c['terr'] < m['terr']
-        hlt = hlt and c['ep'] - m['ep'] > 20
+        # Halt on runing out of Validation Patients
+        hlt = hlt and c['ep'] - m['ep'] > self.hvp
         if hlt:
             # restore the state with lowest validation error.
             self.snap('meov', 'r')
-            self.hlt.set_value(2)  # increased validation error.
+            self.hlt = 2  # increased validation error.
             return True
         return super(Bold, self).__stop__()

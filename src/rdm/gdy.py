@@ -63,7 +63,12 @@ def main(fnm='../../raw/W09', **kwd):
 
     # load data from {fnm}, also do some fixing:
     fdt = dict(np.load(fnm))
-    gmx = fdt['gmx']
+    gmx = fdt['gmx'].astype('f')  # fix data type
+    __i = np.where(gmx.sum((0, 1)) > gmx.shape[0])[0]  # fix MAF
+    gmx[:, :, __i] = 1 - gmx[:, :, __i]
+
+    # dosage format and training format
+    dsg = gmx.sum(-2, dtype='<i4')
 
     # mark some untyped subjects
     usb = kwd.get('usb', 1.0)
@@ -82,11 +87,11 @@ def main(fnm='../../raw/W09', **kwd):
     kwd['ugv'] = ugv        # untyped variant mask
 
     # training data
-    xmx = gmx[usb == 0, :, :][:, :, ugv == 0].astype('f')
+    xmx = gmx[usb == 0, :, :][:, :, ugv == 0]
     xmx = xmx.reshape(xmx.shape[0], -1)
 
     # options in {kwd} takes precedence over those loaded from {fnm}
-    fdt.update(kwd, gmx=gmx, xmx=xmx)
+    fdt.update(kwd, gmx=gmx, dsg=dsg, xmx=xmx)
     kwd = fdt
 
     # check saved progress and overwrite options:

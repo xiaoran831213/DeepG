@@ -111,3 +111,5 @@ src/hwu.R
 *.blg
 *.out
 rpt/*.pdf
+rpt/*.png
+rpt/*.rds

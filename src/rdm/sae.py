@@ -41,8 +41,7 @@ class SAE(Cat):
         """ create SAE by specifying encoding dimensions
         dim: a list of encoding dimensions
         """
-        AEs = [AE(d, **kwd) for d in zip(dim[:-1], dim[1:])]
-        return SAE(AEs)
+        return SAE([AE(d, **kwd) for d in zip(dim[:-1], dim[1:])])
 
     def sub(self, depth, start=None, copy=False):
         """ get sub stack from of lower encoding depth

@@ -14,10 +14,9 @@
 
 ## collect object in a function environment, by default only
 ## visible scalars are collected
-.record <- function(pass=.scalar)
+.record <- function(env=parent.frame(), pass=.scalar, rm.null=0, ...)
 {
     ret <- list()
-    env <- parent.frame()
     for(nm in ls(env))
     {
         obj <- env[[nm]]
@@ -25,6 +24,16 @@
             next
         if(is.null(obj))
            obj <- 'NL'
+        ret[[nm]] <- obj
+    }
+    dot <- list(...)
+    for(nm in ls(dot))
+    {
+        obj <- dot[[nm]]
+        if(!pass(obj))
+            next
+        if(is.null(obj))
+            obj <- 'NL'
         ret[[nm]] <- obj
     }
     ret

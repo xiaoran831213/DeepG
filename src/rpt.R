@@ -41,82 +41,66 @@ sum.rpt <- function(r)
     su
 }
 
-plt.ssz <- function(su, grid=nhf~mdl, out=NULL)
+plt.ssz <- function(su, grid=-log2(nhf)~mdl, out=NULL)
 {
     nm <- grep('^pvl', names(su), value=TRUE)
     su <- reshape(su, nm, 'pow', 'test', direction='long')
     su <- within(su, test <- sub('^pvl.', '', nm)[test])
 
-    ## create title from constant fields
-    u <- sapply(lapply(su, unique), length) == 1L
-    u <- paste(names(su)[u], sapply(su[u], `[`, 1), sep='=', collapse=', ')
+    ## order test types
+    od <- c(hof=1, rsd=2, dsg=3, ibs=4, xmx=5)
+    su <- within(su, test <- reorder(test, od[test]))
     
+    ## create title from constant fields
+    .u <- sapply(lapply(su, unique), length) == 1L
+    .u <- paste(names(su)[.u], sapply(su[.u], `[`, 1), sep='=', collapse=', ')
+
     g <- ggplot(su)
-    ## g <- g + facet_wrap(~ mdl)
     if(!is.null(grid))
-        g <- g + facet_grid(grid)
+    {
+        ## identify facets
+        .v <- all.vars(grid)
+        .t <- terms(grid)
+        if(length(.v) > 1 && attr(.t, 'response') > 0)
+        {
+            g <- g + facet_grid(grid)
+            gx <- length(unique(su[, .v[-1]]))
+            gy <- length(unique(su[, .v[+1]]))
+        }
+        else
+        {
+            g <- g + facet_wrap(grid)
+            gx <- length(unique(su[, .v]))
+            gy <- 1
+        }
+    }
+    else
+    {
+        gx <- 1
+        gy <- 1
+    }
     
     g <- g + geom_line(aes(x=ssz, y=pow, color=test))
     g <- g + xlab('ssz')
     g <- g + ylab('pow')
-    g <- g + ggtitle(u)
-
-    vs <- all.vars(grid)
-    gx <- length(unique(su$mdl))
-    gy <- length(unique(su$nhf))
-    gx <- 4 * gx + gx
-    gy <- 4 * gy
+    g <- g + ggtitle(.u)
+    
+    gx <- 3 * gx + gx
+    gy <- 3 * gy + gy/2
     if(!is.null(out))
     {
-        ggsave(out, g, width=gx, height=gy, limitsize=T)
+        ggsave(out, g, width=gx, height=gy)
     }
-    g
-}
-
-plt.nhf <- function(su, grid=ssz~mdl, out=NULL)
-{
-    nm <- grep('^pvl', names(su), value=TRUE)
-    su <- reshape(su, nm, 'pow', 'test', direction='long')
-    su <- within(su, test <- sub('^pvl.', '', nm)[test])
-
-    ## create title from constant fields
-    u <- sapply(lapply(su, unique), length) == 1L
-    u <- paste(names(su)[u], sapply(su[u], `[`, 1), sep='=', collapse=', ')
-    
-    g <- ggplot(su)
-    ## g <- g + facet_wrap(~ mdl)
-    if(!is.null(grid))
-        g <- g + facet_grid(grid)
-    
-    g <- g + geom_point(aes(x=-log2(nhf), y=pow, color=test, size=1))
-    g <- g + xlab('nhf')
-    g <- g + ylab('pow')
-    g <- g + ggtitle(u)
-
-    vs <- all.vars(grid)
-    gx <- length(unique(su$mdl))
-    gy <- length(unique(su$ssz))
-    gx <- 4 * gx + gx
-    gy <- 4 * gy
-    if(!is.null(out))
-    {
-        ggsave(out, g, width=gx, height=gy, limitsize=T)
-    }
-    g
-}
-
-sum.all <- function(fr)
-{
-    dt <- cat.rpt(fr)
-    su <- sum.rpt(dt)
-    gp <- sum.plt(su)
-    list(r=dt, s=su, p=gp)
+    invisible(g)
 }
 
 tmp <- function()
 {
-    r40 <- sum.all('sim/GMX/S40')
-    write.csv(r40$s, 'rpt/s40.csv', row.names=F)
-    ## r45 <- sum.all('sim/GMX/S45')
-    ## r49 <- sum.all('sim/GMX/S49')
+    r <- readRDS('rpt/s4_.rds')
+    s <- sum.rpt(r)
+    m=mdl~log2(2^10/nhf)
+    p=plt.ssz(subset(s, mdl=='g',   -c(pvl.dsg, pvl.xmx)), m, out='rpt/img/szz_gno_ibs.png')
+    p=plt.ssz(subset(s, mdl=='g*g', -c(pvl.dsg, pvl.xmx)), m, out='rpt/img/szz_gxg_ibs.png')
+    p=plt.ssz(subset(s, mdl=='g',   -c(pvl.ibs, pvl.xmx)), m, out='rpt/img/szz_gno_dsg.png')
+    p=plt.ssz(subset(s, mdl=='g*g', -c(pvl.ibs, pvl.xmx)), m, out='rpt/img/szz_gxg_dsg.png')
 }

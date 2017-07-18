@@ -281,38 +281,35 @@ The interpretation of update rules is quiet straight forward, for $w_{ij}$, the 
 \end{itemize}
 % new subsection
 \subsection{MLE with Symbolic Library}
-The primative update rules is necessary for developing a BM trainer from scratch, but in case of available symbolic mathematics libraries such as Python-Theano and Matlab-Symbolics, it is often unnecessary or even over-developing to implement the primative rules in equ \ref{eq:gv3}. Instead, it would be more efficient and easier to just specify the objective (or even puesdo objective) function (\ref{eq:gv1}), and let the software packages to figure out the gradient function, and subsequently, the update rules.
-Review the negative log likelihood gradient in equation \ref{eq:gv1}, we see the objective function to be minimized with respect to $\pEC$, is actually
+The primative update rules is necessary for developing a BM trainer from scratch, but in case of available symbolic mathematics libraries such as Python-Theano and Matlab-Symbolics, it is often unnecessary or even over-developing to implement the primative rules in equation (\ref{eq:gv3}). Instead, it would be more efficient and easier to just construct a crude objective function, but let the software packages to figure out the gradient function, and subsequently, the update rules.
+Review the negative log likelihood gradient in equation (\ref{eq:gv1}), we see the crude objective function to be minimized with respect to $\pEC$ is
 \begin{align}\label{eq:l(v)1}
-  L(\vv; \pEC) = -\log{\int_{\vh}{e^{-E(\vv, \vh)}d\vh}} + \mean{\log{\int_{\vh}{e^{-E(\vvt, \vh)}d\vh}}}{\vvt}
+  -\log{\Pr(\vv)} = -\log{\int_{\vh}{e^{-E(\vv, \vh)}d\vh}} + \mean{\log{\int_{\vh}{e^{-E(\vvt, \vh)}d\vh}}}{\vvt}
 \end{align}
 which involves the mean of marginal distribution $\Pr(\vvt)$, posing a severe challenge to direct evaluation attempt, we instead resort to approximation via limited sampling from $\Pr(\vvt)$:
 \begin{align}\label{eq:l(v)2}
-  L(\vv; \pEC) \approx -\log{\int_{\vh} e^{-E(\vv, \vh)} d\vh} + \frac{1}{|M|}\sum_{\vvt \in M}{\log{\int_{\vh} e^{-E(\vvt, \vh)}d\vh}}
+  -\log{\Pr(\vv)} \approx -\log{\int_{\vh} e^{-E(\vv, \vh)} d\vh} + \frac{1}{|M|}\sum_{\vvt \in M}{\log{\int_{\vh} e^{-E(\vvt, \vh)}d\vh}}
 \end{align}
 where $M$ is the set of samples drawn from $\Pr(\vvt)$. \\
-It is now helpfult to introduce the notion of ``free energy'' $F$, which, just likes the complete energy $E$ that corresponds to each distinct state $\vs=(\vv, \vh)$, corresponds to every distinct visible state $\vv$. Free energy takes the form:
-\begin{equation}\label{eq:f(v)}
-  \begin{split}
-    F(\vv) &= -\log{\int_{\vh}{e^{-E(\vv, \vh)}d\vh}}.
-  \end{split}
-\end{equation}
-Compare (\ref{eq:f(v)}) with (\ref{eq:e(s)}), we see that $F(\vv)$ is actually the kernel of $\Pr(\vv)$ which is the marginal distribution of $Pr(\vv, \vh)$ over $\vh$ under the negative log scale. Refer to (\ref{eq:p(s)}), $F(\vv)$ governs the system in the same manner, allbeit the only concern of $F(\vv)$ is the visible portion:
+It is now helpfult to introduce the notion of ``\textbf{free energy}'' $F$, which, just likes the complete energy $E$ that corresponds to each distinct state $\vs=(\vv, \vh)$, corresponds to every distinct visible state $\vv$. \textbf{Free energy} takes the form:
+\begin{align}\label{eq:f(v)}
+    F(\vv) = -\log{\int_{\vh}{e^{-E(\vv, \vh)}d\vh}}.
+\end{align}
+Compare (\ref{eq:f(v)}) with (\ref{eq:e(s)}), we see that $F(\vv)$ is in essence the kernel of $\Pr(\vv)$ under negative log scale, which is the marginal distribution of $Pr(\vv, \vh)$ over $\vh$. Refer to equation (\ref{eq:p(s)}), $F(\vv)$ governs the system behavior in the same manner, allbeit the only concern of $F(\vv)$ is the visible portion:
 \begin{align}\label{eq:p(v)|fe}
     \Pr(\vv) = \frac{e^{-F(\vv)}}{Z}, \quad\quad Z=\int_{\vv}{e^{-F(\vv)}}d\vv
 \end{align}
-It makes the aforementioned gradient expression more concise:
-\begin{align}\label{eq:grad3}
+It makes the aforementioned crude objective function expression more concise:
+\begin{align}\label{eq:l(v)3}
+  -\log{\Pr(\vv)} \approx F(\vv) - \frac{1}{|M|}\sum_{\vvt \in M}{F(\vvt)},
+\end{align}
+The update rules depends on the gradient of objective function with respect to the flexible parameters $\pEC$:
+\begin{align}\label{eq:gv4}
   -\PDV{\log{\Pr(\vv)}}{\pEC} \approx \PDV{F(\vv)}{\pEC} - \PDV{\frac{1}{|M|}\sum_{\vvt \in M}{F(\vvt)}}{\pEC},
 \end{align}
-\subsection{Theano Implementation}
-For Python-Theano users, is would be best to utilize Theano's symbolic gradiant solver. From the gradient form in either (\ref{eq:gv2}) or (\ref{eq:gv3}), we could consider the numerator portion as the objective funtion $L(\vv; \pEC)$ to be minimized by stochastic gradient descent (SGD)[?], such that,
-\begin{align}
-  L(\vv) = F(\vv) - \frac{1}{|M|}\sum_{\vvt \in M}{F(\vvt)},
-\end{align}
-where $F(\vv)$ depends on $E(\vv, \vh)$ which is further parameterized by $\pEC$; $\vv$, $\vh$ and the limited samples $\vvt \in M$ are all considered constant, and we will let Theano to figure out the gradient function $\PDV{L(\vv)}{\pEC}$
+A symbolic library user should program the \textbf{free energy} function $F(\vv)$, the sampling procedure from $\Pr{\vv}$, the approximated crude lose (equation \ref{eq:l(v)3}), but leave the code of gradient function (equation \ref{eq:gv4}) for the library to automatically program, optimize, and even compile into low level machine language for best hardware utilization.
 
-\section{Binary RBM}
+\section{Restricted Boltzmann Machine}
 In a generic Bolzmann Machine (GBM), all units are allowed to connect with each other, the preceding adjective ``Restricted'' highlights an additional constraint that connection is forbidden among visible units themselves, and among hidden units as well, only those between the two group are allowed, as Figure \ref{fig:rbm} illustrates.
 \begin{figure}[h]
   \centering

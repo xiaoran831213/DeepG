@@ -9,7 +9,8 @@
 \usepackage[normalem]{ulem}
 \usepackage[colorlinks,bookmarksopen,bookmarksnumbered,citecolor=blue,urlcolor=blue]{hyperref}
 \usepackage{moreverb,setspace}
-
+\usepackage{algpseudocode}
+%
 % Text layout
 \topmargin -1.5cm
 \oddsidemargin 0.0cm
@@ -244,6 +245,16 @@ Joint (\ref{eq:ge}) and (\ref{eq:gv2}) we get the primative update rules for the
   \textrm{where }               & 1 \le i < j \le P+Q.
 \end{align*}
 The interpretation of update rules are quiet straight forward, for $w_{ij}$, the connection between $s_i$ and $s_j$, it is the difference of unit $i$ and $j$'s covariance between a system clumped on visible units and the same system that has been set free; as for $b_i$, the unit offset (activation threshold) of $s_i$, the update is the difference of mean value on the $i$ th unit, between a clumped and free run systems. At this point, we are readly to train a Bolztmann Machine by iteration:
+\begin{algorithmic}
+{positive phase}
+\If {$i\geq maxval$}
+    \State $i\gets 0$
+\Else
+    \If {$i+k\leq maxval$}
+        \State $i\gets i+k$
+    \EndIf
+\EndIf
+\end{algorithmic}
 \begin{itemize}
 \item \textbf{Positive/Data} Phase:
   \begin{itemize}
@@ -272,7 +283,7 @@ The interpretation of update rules are quiet straight forward, for $w_{ij}$, the
 \end{itemize}
 % new subsection
 \subsection{MLE with Symbolic Library}
-The primative update rules is necessary for developing a BM trainer from scratch, but in case of available symbolic mathematics libraries such as Python-Theano and Matlab-Symbolics, it is often unnecessary or even over-developing to implement the primative rules in equation (\ref{eq:gv3}). Instead, it would be more efficient and easier to just construct a crude objective function, but let the software packages to figure out the gradient function, and subsequently, the update rules.
+The primative update rules are necessary for developing a BM trainer from scratch, in case of available symbolic mathematics libraries however, such as Python-Theano and Matlab-Symbolic, it is often unnecessary, or even over-developing to implement the primative rules in equation (\ref{eq:gv3}) directly. Instead, it would be more efficient and easier to just construct a crude objective function, let the software packages to figure out the gradient function, and subsequently, the update rules.
 Review the negative log likelihood gradient in equation (\ref{eq:gv1}), we see the crude objective function to be minimized with respect to $\pEC$ is
 \begin{align}\label{eq:l(v)1}
   -\log{\Pr(\vv)} = -\log{\int_{\vh}{e^{-E(\vv, \vh)}d\vh}} + \mean{\log{\int_{\vh}{e^{-E(\vvt, \vh)}d\vh}}}{\vvt}
@@ -286,7 +297,7 @@ It is now helpfult to introduce the notion of ``\textbf{free energy}'' $F$, whic
 \begin{align}\label{eq:f(v)}
     F(\vv) = -\log{\int_{\vh}{e^{-E(\vv, \vh)}d\vh}}.
 \end{align}
-Compare (\ref{eq:f(v)}) with (\ref{eq:e(s)}), we see that $F(\vv)$ is in essence the kernel of $\Pr(\vv)$ under negative log scale, which is the marginal distribution of $Pr(\vv, \vh)$ over $\vh$. Refer to equation (\ref{eq:p(s)}), $F(\vv)$ governs the system behavior in the same manner, allbeit the only concern of $F(\vv)$ is the visible portion:
+Compare (\ref{eq:f(v)}) with (\ref{eq:e(s)}), we see that $F(\vv)$ in essence is the kernel of $\Pr(\vv)$ under negative log scale, which is the marginal distribution of $Pr(\vv, \vh)$ over $\vh$. Refer to equation (\ref{eq:p(s)}), $F(\vv)$ governs the system behavior in a similar manner, allbeit the only concern of $F(\vv)$ is the visible units:
 \begin{align}\label{eq:p(v)|fe}
     \Pr(\vv) = \frac{e^{-F(\vv)}}{Z}, \quad\quad Z=\int_{\vv}{e^{-F(\vv)}}d\vv
 \end{align}
@@ -327,7 +338,7 @@ The negative log kernel of marginal probability $Pr(\vv)$, that is, the free ene
   \Rightarrow
   F(\vv) &= -\vb^T\vv - \sum_{j=1}^Q{\log{(e^{c_j+\vw_j\vv} + 1)}} \numberthis \label{eq:fe_bin}.
 \end{align*}
-\subsection{Sampleing the Visible Units}
+\subsection{Sampling the Visible Units}
 Besides the free energy $F(\vv)$, we must sample from $\Pr(\vv)$ in order to complete the objective function and the gradient (\ref{eq:grad2}), which will be accomplished by a Gibbs sampler. Exploiting the network structure that forbids connection among the visible units and the hidden units (Figure \ref{fig:rbm}), the sampler can draw all hidden units at once given the visible units, and vise visa. From (\ref{eq:p(s)}), (\ref{eq:p(v)}) and (\ref{eq:fe2}) we see
 \[  \Pr(\vh|\vv) = \frac{\Pr(\vv, \vh)}{\Pr(\vv)} = \frac{e^{-E(\vv, \vh)}}{\int_{\vh}{e^{-E(\vv, \vh)}d\vh}} = \frac{e^{-E(\vv, \vh)}}{e^{-F(\vv)}} = e^{F(\vv) - E(\vv, \vh)}.  \]
 Plug binary system energy (\ref{eq:se_bin}) and free energy of the visibles (\ref{eq:fe_bin}) into the above equation we have:

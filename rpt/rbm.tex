@@ -10,6 +10,7 @@
 \usepackage[colorlinks,bookmarksopen,bookmarksnumbered,citecolor=blue,urlcolor=blue]{hyperref}
 \usepackage{moreverb,setspace}
 \usepackage{algpseudocode}
+\usepackage{algorithm}
 %
 % Text layout
 \topmargin -1.5cm
@@ -155,25 +156,25 @@ which is a Boltzmann distribution that assigns lower engery states higher densit
     E(\vv, \vh) = E(\vs) = -\sum_{i=1}^{P+Q} b_i s_i - \sum_{1 = i < j}^{P+Q} s_i w_{ij} s_j \numberthis
 \end{align*}
 where $b_i$ is an offest, serving as the thresholds for the $i$ th unit to switch from ``off'' to ``on'' state; $w_ij$ is the connection between the $i$ th and $j$ th units. The first term depicts that an total energy no less than an unit's threshold is required to maintain that unit's ``on'' state; the second terms says that extra energy is required to sustain a active mutual connection when the two units at both ends are ``on''. The energy function is thus paramterized by $P+Q$ offsets and $P+Q \choose 2$ undirected connections, we represent them by $\pEC = \{b_i, m_{ij} | 1 \le i < j \le P+Q\}$. \\
-A1: The probability of a particular unit $s_k, (k = 1, \dots, P+Q)$ being turned on is
+A1: The probability of a particular unit $s_k, (k = 1, \dots, P+Q)$ being turned on in the next stage is, given the current state of the rest of the system $\vs_{k-}$:
 \begin{equation}\label{eq:p(s_k=1)}
-  \Pr(s_k = 1) = \sigma(b_k + \sum_{i=1, i \ne k}^{P+Q}{s_i w_{ik}})
+  \Pr(s_k = 1|\vs_{k-}) = \sigma(b_k + \sum_{i=1, i \ne k}^{P+Q}{s_i w_{ik}})
 \end{equation}
-Here,  $\sigma(x) = [1 + \exp({-x})]^{-1}$ is the sigmoid (logistic) function. \\
+Here,  $\sigma(x) = [1 + \exp({-x})]^{-1}$ is the sigmoid (logistic) function; $\vs_{k-}$ denote all units' value in the system, visible and hidden alike, except $s_k$. \\
 Proof: start by splitting the energy contributed by the $k$ th unit from the rest,
 \newcommand{\st}{\tilde{s}}
 \begin{align*}
   E(\vs)
   & = \left( -\sum_{i=1, i \ne k}^{P+Q} b_i s_i - \sum_{1 \le i < j, i \ne k, j \ne k}^{P+Q} s_i w_{ij} s_j \right) + \left(-b_k s_k - \sum_{i=1, i \ne k}^{P+Q}s_i w_{ik} s_k \right) \\
   & = E(\vs_{-k}) + E(s_k), \\
-  \Rightarrow \Pr(s_k)
+  \Rightarrow \Pr(s_k | \vs_{k-})
   & = \int_{\vs_{-k}} \Pr(\vs) d\vs_{-k} = \frac{1}{Z} \int_{\vs_{-k}} e^{-E(\vs)} d\vs_{-k} \Leftarrow (\ref{eq:p(s)}) \\
   & = \frac{\int_{\vs_{-k}} e^{-E(\vs)} d\vs_{-k}}{\int_{\vs} e^{-E(\vs)} d\vs} \\
   & = \frac{e^{-E(s_k)} \int_{\vs_{-k}} e^{-E(\vs_{-k})} d\vs_{-k}}  {\int_{\st_k} \int_{\vs_{-k}} e^{-E(\vs_{-k})} d\vs_{-k}\,d\st_k} \\
   & = \frac{e^{-E(s_k)} \int_{\vs_{-k}} e^{-E(\vs_{-k})} d\vs_{-k}}  {[e^{-E(\st_k)}|_{\st_k=1} + e^{-E(\st_k)}|_{\st_k=0}] \int_{\vs_{-k}} e^{-E(\vs_{-k})} d\vs_{-k}} \\
   & = \frac{e^{-E(s_k)}}{e^{-E(\st_k)}|_{\st_k=1} + e^{-E(\st_k)}|_{\st_k=0}} \\
   % 
-  \Rightarrow \Pr(s_k=1)
+  \Rightarrow \Pr(s_k=1 | \vs_{k-})
   & = \frac{e^{-E(s_k)}|_{s_k=1}}{e^{-E(\st_k)}|_{\st_k=1} + e^{-E(\st_k)}|_{\st_k=0}} \\
   & = \frac{e^{b_k + \sum_{i=1, i \ne k}^{P+Q}{s_i w_{ik}}}}{e^{b_k + \sum_{i=1, i \ne k}^{P+Q}{s_i w_{ik}}} + e^{0}} \\
   & = \frac{1}{1 + e^{-b_k - \sum_{i=1, i \ne k}^{P+Q}{s_i w_{ik}}}} \\
@@ -244,102 +245,63 @@ Joint (\ref{eq:ge}) and (\ref{eq:gv2}) we get the primative update rules for the
   -\PDV{\log{\Pr(\vv)}}{b_i}    &= \mean{s_i}{\vh|\vv} - \mean{s_i}{\vvt, \vht} \numberthis \\
   \textrm{where }               & 1 \le i < j \le P+Q.
 \end{align*}
-The interpretation of update rules are quiet straight forward, for $w_{ij}$, the connection between $s_i$ and $s_j$, it is the difference of unit $i$ and $j$'s covariance between a system clumped on visible units and the same system that has been set free; as for $b_i$, the unit offset (activation threshold) of $s_i$, the update is the difference of mean value on the $i$ th unit, between a clumped and free run systems. At this point, we are readly to train a Bolztmann Machine by iteration:
-\begin{algorithmic}
-{positive phase}
-\If {$i\geq maxval$}
-    \State $i\gets 0$
-\Else
-    \If {$i+k\leq maxval$}
-        \State $i\gets i+k$
-    \EndIf
-\EndIf
-\end{algorithmic}
-\begin{itemize}
-\item \textbf{Positive/Data} Phase:
-  \begin{itemize}
-  \item clump the observed $P$ dimensional sample onto the $P$ visible units $\vv$;
-  \item simulate the ``thermal'' dynamics of $Q$ hidden units according to (\ref{eq:p(s_k=1)});
-  \item repeat until the values on $\vh$ reaches ``thermal'' equilibrium (burn in);
-  \item repeat some more time (sampling), \\
-    estimate $\mean{s_i s_j}{\vh|\vv}$ by the proportion of times both unit $i$ and $j$ are on; \\
-    estimate $\mean{s_i}{\vh|\vv}$ by the proportion of times unit $i$ is on;
-  \end{itemize}
-\item \textbf{Negative/Model} Phase:
-  \begin{itemize}
-  \item relax the constraint on the $P$ visible units;
-  \item simulate the ``thermal'' dynamics of all $P + Q$ units according to (\ref{eq:p(s_k=1)});
-  \item repeat until the values on $(\vv, \vh)$ reaches ``thermal'' equilibrium (burn in);
-  \item repeat some more time (sampling), \\
-    estimate $\mean{s_i s_j}{\vv, \vh}$ by the proportion of times both unit $i$ and $j$ are on; \\
-    estimate $\mean{s_i}{\vv, \vh}$ by the proportion of times unit $i$ is on;
-  \end{itemize}
-\item Update:
-  \begin{itemize}
-  \item \quad $w_{ij}^{(t+1)} = w_{ij}^{(t)} + \epsilon (\mean{s_i s_j}{\vh|\vv} - \mean{s_i s_j}{\vv, \vh})$
-  \item \quad $b_i^{(t+1)}    = b_i^{(t)}    + \epsilon (\mean{s_i    }{\vh|\vv} - \mean{s_i    }{\vv, \vh})$
-  \end{itemize}
-\item Repeat until all $w_{ij}$ and $b_i$ converges.
-\end{itemize}
-% new subsection
-\subsection{MLE with Symbolic Library}
-The primative update rules are necessary for developing a BM trainer from scratch, in case of available symbolic mathematics libraries however, such as Python-Theano and Matlab-Symbolic, it is often unnecessary, or even over-developing to implement the primative rules in equation (\ref{eq:gv3}) directly. Instead, it would be more efficient and easier to just construct a crude objective function, let the software packages to figure out the gradient function, and subsequently, the update rules.
-Review the negative log likelihood gradient in equation (\ref{eq:gv1}), we see the crude objective function to be minimized with respect to $\pEC$ is
-\begin{align}\label{eq:l(v)1}
-  -\log{\Pr(\vv)} = -\log{\int_{\vh}{e^{-E(\vv, \vh)}d\vh}} + \mean{\log{\int_{\vh}{e^{-E(\vvt, \vh)}d\vh}}}{\vvt}
-\end{align}
-which involves the mean of marginal distribution $\Pr(\vvt)$, posing a severe challenge to direct evaluation attempt, we instead resort to approximation via limited sampling from $\Pr(\vvt)$:
-\begin{align}\label{eq:l(v)2}
-  -\log{\Pr(\vv)} \approx -\log{\int_{\vh} e^{-E(\vv, \vh)} d\vh} + \frac{1}{|M|}\sum_{\vvt \in M}{\log{\int_{\vh} e^{-E(\vvt, \vh)}d\vh}}
-\end{align}
-where $M$ is the set of samples drawn from $\Pr(\vvt)$. \\
-It is now helpfult to introduce the notion of ``\textbf{free energy}'' $F$, which, just likes the complete energy $E$ that corresponds to each distinct state $\vs=(\vv, \vh)$, corresponds to every distinct visible state $\vv$. \textbf{Free energy} takes the form:
-\begin{align}\label{eq:f(v)}
-    F(\vv) = -\log{\int_{\vh}{e^{-E(\vv, \vh)}d\vh}}.
-\end{align}
-Compare (\ref{eq:f(v)}) with (\ref{eq:e(s)}), we see that $F(\vv)$ in essence is the kernel of $\Pr(\vv)$ under negative log scale, which is the marginal distribution of $Pr(\vv, \vh)$ over $\vh$. Refer to equation (\ref{eq:p(s)}), $F(\vv)$ governs the system behavior in a similar manner, allbeit the only concern of $F(\vv)$ is the visible units:
-\begin{align}\label{eq:p(v)|fe}
-    \Pr(\vv) = \frac{e^{-F(\vv)}}{Z}, \quad\quad Z=\int_{\vv}{e^{-F(\vv)}}d\vv
-\end{align}
-It makes the aforementioned crude objective function expression more concise:
-\begin{align}\label{eq:l(v)3}
-  -\log{\Pr(\vv)} \approx F(\vv) - \frac{1}{|M|}\sum_{\vvt \in M}{F(\vvt)},
-\end{align}
-The update rules depends on the gradient of objective function with respect to the flexible parameters $\pEC$:
-\begin{align}\label{eq:gv4}
-  -\PDV{\log{\Pr(\vv)}}{\pEC} \approx \PDV{F(\vv)}{\pEC} - \PDV{\frac{1}{|M|}\sum_{\vvt \in M}{F(\vvt)}}{\pEC},
-\end{align}
-A symbolic library user should program the \textbf{free energy} function $F(\vv)$, the sampling procedure from $\Pr{\vv}$, the approximated crude lose (equation \ref{eq:l(v)3}), but leave the code of gradient function (equation \ref{eq:gv4}) for the library to automatically program, optimize, and even compile into low level machine language for best hardware utilization.
+The interpretation of update rules are quiet straight forward, for $w_{ij}$, the connection between $s_i$ and $s_j$, it is the difference of unit $i$ and $j$'s covariance between a system clumped on visible units and the same system that has been set free; as for $b_i$, the unit offset (activation threshold) of $s_i$, the update is the difference of mean value on the $i$ th unit, between a clumped and free run systems. At this point, we are readly to write the update algorithm of a Bolztmann Machine based on one sample:
+\begin{algorithm}[h]
+  \caption{One sample update rule for Boltzmann Machine}\label{alg:gbm1}
+  \begin{algorithmic}[1]
+    \State Clump $P$ dimenional obsevation on $P$ visible units $\vv$ \Comment{\textbf{Positive} Phase}
+    \Repeat                                                           \Comment{burn in}
+    \State Simulate thermal dynamics of $\vh$ by (\ref{eq:p(s_k=1)})
+    \Until{$\vh$ reaches ``thermal'' equilibrium}
+    \Repeat                                                           \Comment{sampling}
+    \State Simulate thermal dynamics of $\vh$ by (\ref{eq:p(s_k=1)})
+    \State Store $\vs=(\vv, \vh)$
+    \Until{enough sample of $\vs$ is gathered}
+    \State $\mean{s_i s_j}{\vh|\vv} \approx$ proportion of times both $s_i$ and $s_j$ are on
+    \State $\mean{s_i}{\vh|\vv} \approx$ proportion of times $s_i$ is on
+    \Statex
 
+    \State Relex the constraint on $P$ visible units $\vv$            \Comment{\textbf{Negative} Phase}
+    \Repeat                                                           \Comment{burn in}
+    \State Simulate thermal dynamics of $\vs=(\vv, \vh)$ by (\ref{eq:p(s_k=1)})
+    \Until{$\vs$ reaches thermal equilibrium}
+    \Repeat                                                           \Comment{sampling}
+    \State Simulate thermal dynamics of $\vs=(\vv, \vh)$ by (\ref{eq:p(s_k=1)})
+    \State Store $\vs=(\vv, \vh)$
+    \Until{enough sample of $\vs$ is gathered}
+    \State $\mean{s_i s_j}{\vvt, \vht} \approx$ proportion of times both $s_i$ and $s_j$ are on
+    \State $\mean{s_i}{\vvt, \vht} \approx$ proportion of times $s_i$ is on
+    \Statex
+
+    \State $-\Delta w_{ij} \gets \mean{s_i s_s}{\vh|\vv} - \mean{s_i s_j}{\vv, \vh}$ 
+    \State $-\Delta b_{i} \gets \mean{s_i}{\vh|\vv} - \mean{s_i}{\vv, \vh}$ 
+    \State \Return $-\Delta \mw$ and $-\Delta \vb$
+  \end{algorithmic}
+\end{algorithm} \\
+Although the update rules has sample form, the exact values of $\mean{s_i s_j}{\vh|\vv}$, $\mean{s_i}{\vh|\vv}$, as well as $\mean{s_i s_j}{\vvt, \vht}$, $\mean{s_i}{\vvt, \vht}$, are computationally intractable because they involves going through either all $P+Q \choose 2$ states (for negative phase) or $Q \choose 2$ hidden states (for positive phase). Therefore we resolved to Gibbis sampling for approximations of the four mean values. Still, the sampling requires considerable time, and the resulting update rules is a noisy gradient of $\Pr(\vv)$ w.r.t. $\mw$ and $\vb$. Thus, Boltzmann Machine is unfit for problems involving large number of variables, a issue somewhat mitigated by relpacing the Gibbs sampling procedure with mean field approximation (will be included in this note in the future).
+The expansion of the one sample update rule to a batch of $N$ samples is straight forward, just apply Algorithm \ref{alg:gbm1} to each sample then take the mean over $N$ sets of update rules.
+% new subsection
 \section{Restricted Boltzmann Machine}
-In a generic Bolzmann Machine (GBM), all units are allowed to connect with each other, the preceding adjective ``Restricted'' highlights an additional constraint that connection is forbidden among visible units themselves, and among hidden units as well, only those between the two group are allowed, as Figure \ref{fig:rbm} illustrates.
+\subsection{Concept}
+In a generic Bolzmann Machine (GBM), all units are allowed to connect with each other, the preceding adjective ``Restricted'' highlights additional constraints that connection is forbidden among visible units, as well as among hidden units, while between the two full connection is still established, as Figure \ref{fig:rbm} illustrates:
 \begin{figure}[h]
   \centering
   \includegraphics[width=100px]{img/rbm.png}
   \caption{The Restricted Boltzmann Machine.}\label{fig:rbm}
 \end{figure}
-The behavior of the system is determined by the engergy function $E(\vv, \vh)$, parameterized by $\pEC$. We now limit the discussion on the most heavily researched binary systems, that is, the entries in $\vv$ and $\vh$ are only taken from $\{0, 1\}$. The energy $E(\vv, \vh)$ is formulated by:
-\begin{equation} \label{eq:se_bin}
-  E(\vv, \vh) = -\vb^T \vv - \vc^T \vh - \vh^T \mw \vv,
+Like the general Boltzmann Machine, the behavior of the system is still determined by the engergy function $E(\vv, \vh)$ parameterized by $\pEC$, now thanks to the restriction however, the terms concerning visible and hidden units can be factored out from each other:
+\begin{equation} \label{eq:rbm:e(s)}
+  E(\vv, \vh) = -\sum_{i=1}^{P}{b_i v_i} - \sum_{j=1}^{Q}{c_j h_j} - \sum_{i=1}^P\sum_{j=1}^Q{v_i w_{ij} h_j} = -\vb^T \vv - \vc^T \vh - \vh^T \mw \vv,
 \end{equation}
 where the entries in the P-dimensional coefficient $\vb$ dictates the negative energy contribute to the system when the corresponding visible units in $\vv$ are turned on (i.e., taking value 1), that is, larger $b_i, (i=1, \dots, P)$ means more more engery drained when $v_i$ is on, thus making any states with $v_i=1$ relatively more predominant. The Q-dimensional coefficent $\vc$'s entries can be interpreted in the same way, that is, larger $c_j, (j=1, \dots, Q)$ prop up states with $h_j=1$. The entries in the weight matrix $\mw$ determine the connection between pairs of visible and hidden units, visualized by the edges in Figure \ref{fig:rbm}. A large $W_{ij}$ either encourages (when positive) or prohibits (when negative) co-activation of $v_i$ and $h_j$, conversely, a small $W_{ij}$ diminish mutual dependency of the two.
-\subsection{Free Anergy}
-The negative log kernel of marginal probability $Pr(\vv)$, that is, the free energy, is simplified in a binary system:
+\subsection{MLE for RBM}
+The gradient descent of a RBM shares the same form with a general BM, both involve the intractable calculation of the expected values of a full Bolztmann distribution and its conditional form on observed values (equation \ref{eq:gv3}). However, exploitating the visible - visible and hidden - hidden independence (figure \ref{fig:rbm}), the thermal dynamics of a RBM can be simulated by batches instead of one dimension at a time (equation \ref{eq:p(s_k=1)}), which can drastically speed up the sampling procedure needed to approximate the expected values. The batch simulation involves drawing all visible units given the hidden units, and all hidden units given the visible ones, in a manner of back and forth:
 \begin{align*}
-  F(\vv) &= -\log{\sum_{\vh\in \{0,1\}^Q}{e^{\vb^T \vv + \vc^T \vh + \vh^T \mw \vv}}} \\
-         &= -\log{\left[ e^{\vb^T\vv}\sum_{\vh\in \{0,1\}^Q}{e^{\vh^T(\vc + \mw \vv)}} \right]} \\
-         &= -\vb^T\vv - \log{\sum_{\vh\in \{0,1\}^Q}{ \prod_{j=1}^Q{e^{h_j(c_j + \vw_j\vv)}} }}; \\
-  \textrm{and} \quad & \sum_{h_1, \dots h_Q \in \{0,1\}}{\prod_{j=1}^Q{e^{h_j(c_j + \vw_j\vv)}}} \\
-         &= (e^{c_1+\vw_1\vv}+e^{0}) \sum_{h_2 \dots h_Q \in\{0,1\}}{ \prod_{j=2}^Q{e^{h_j(c_j + \vw_j\vv)}} } \\
-         &= (e^{c_1+\vw_1\vv}+e^{0})(e^{c_2+\vw_2\vv}+e^{0}) \sum_{h_3 \dots h_Q \in\{0,1\}}{ \prod_{j=3}^Q{e^{h_j(c_j + \vw_j\vv)}} } \\
-         & \quad \vdots \\
-         &= (e^{c_1+\vw_1\vv}+e^{0})(e^{c_2+\vw_2\vv}+e^{0}) \dots (e^{c_Q+\vw_Q\vv}+e^{0}) \\
-         &= \prod_{j=1}^Q{(e^{c_j+\vw_j\vv} + 1)}; \\
-  \Rightarrow
-  F(\vv) &= -\vb^T\vv - \sum_{j=1}^Q{\log{(e^{c_j+\vw_j\vv} + 1)}} \numberthis \label{eq:fe_bin}.
+  \Pr(v_i=1|\vh) & = \sigma(-\sum_{j=1}^Q{c_j h_j} -\sum_{j=1}^Q{w_{ij} h_j}); \numberthis \label{eq:rbm:p(v|h)} \\
+  \Pr(h_j=1|\vv) & = \sigma(-\sum_{i=1}^P{b_i v_i} -\sum_{i=1}^P{v_i w_{ij}}). \numberthis \label{eq:rbm:p(h|v)}
 \end{align*}
-\subsection{Sampling the Visible Units}
-Besides the free energy $F(\vv)$, we must sample from $\Pr(\vv)$ in order to complete the objective function and the gradient (\ref{eq:grad2}), which will be accomplished by a Gibbs sampler. Exploiting the network structure that forbids connection among the visible units and the hidden units (Figure \ref{fig:rbm}), the sampler can draw all hidden units at once given the visible units, and vise visa. From (\ref{eq:p(s)}), (\ref{eq:p(v)}) and (\ref{eq:fe2}) we see
+The improvement over general boltzmann machine is readily seen from equation (\ref{eq:rbm:p(h|v)}), such that the sampling of hidden units during the positive phase can start right after clumping the visible units $\vv$ is clumped with empirical values, instantly reaching thermal equilibrium without any burn in period; and of course, by allowing all visible units $v_i (i=1, \dots, P)$ to be sampled simultaneously and vise versa for all hidden units, the time needed to reach thermal equilibrium (burn in) for the negative phase, as well as the time needed to sample from both visible and hidden units is also greatly shortened.
+ , the sampler can draw all hidden units at once given the visible units, and vise visa. From (\ref{eq:p(s)}), (\ref{eq:p(v)}) and (\ref{eq:fe2}) we see
 \[  \Pr(\vh|\vv) = \frac{\Pr(\vv, \vh)}{\Pr(\vv)} = \frac{e^{-E(\vv, \vh)}}{\int_{\vh}{e^{-E(\vv, \vh)}d\vh}} = \frac{e^{-E(\vv, \vh)}}{e^{-F(\vv)}} = e^{F(\vv) - E(\vv, \vh)}.  \]
 Plug binary system energy (\ref{eq:se_bin}) and free energy of the visibles (\ref{eq:fe_bin}) into the above equation we have:
 \begin{align*}
@@ -366,6 +328,50 @@ Together we have the full Gibbs sampler from $\Pr(\vv, \vh)$:
   \Pr(v_i|\vh) &= \sigma(b_i+\vh^T\vw_i)
 \end{align*}
 % 
+\section{MLE with Symbolic Library}
+The primative update rules are necessary for developing a BM trainer from scratch, in case of available symbolic mathematics libraries however, such as Python-Theano and Matlab-Symbolic, it is often unnecessary, or even over-developing to implement the primative rules in equation (\ref{eq:gv3}) directly. Instead, it would be more efficient and easier to just construct a crude objective function, let the software packages to figure out the gradient function, and subsequently, the update rules.
+Review the negative log likelihood gradient in equation (\ref{eq:gv1}), we see the crude objective function to be minimized with respect to $\pEC$ is
+\begin{align}\label{eq:l(v)1}
+  -\log{\Pr(\vv)} = -\log{\int_{\vh}{e^{-E(\vv, \vh)}d\vh}} + \mean{\log{\int_{\vh}{e^{-E(\vvt, \vh)}d\vh}}}{\vvt}
+\end{align}
+which involves the mean of marginal distribution $\Pr(\vvt)$, posing a severe challenge to direct evaluation attempt, we instead resort to approximation via limited sampling from $\Pr(\vvt)$:
+\begin{align}\label{eq:l(v)2}
+  -\log{\Pr(\vv)} \approx -\log{\int_{\vh} e^{-E(\vv, \vh)} d\vh} + \frac{1}{|M|}\sum_{\vvt \in M}{\log{\int_{\vh} e^{-E(\vvt, \vh)}d\vh}}
+\end{align}
+where $M$ is the set of samples drawn from $\Pr(\vvt)$. \\
+\subsection{Free Energy}
+It is now helpfult to introduce the notion of ``\textbf{free energy}'' $F$, which, just likes the complete energy $E$ that corresponds to each distinct state $\vs=(\vv, \vh)$, corresponds to every distinct visible state $\vv$. \textbf{Free energy} takes the form:
+\begin{align}\label{eq:f(v)}
+    F(\vv) = -\log{\int_{\vh}{e^{-E(\vv, \vh)}d\vh}}.
+\end{align}
+Compare (\ref{eq:f(v)}) with (\ref{eq:e(s)}), we see that $F(\vv)$ in essence is the kernel of $\Pr(\vv)$ under negative log scale, which is the marginal distribution of $Pr(\vv, \vh)$ over $\vh$. Refer to equation (\ref{eq:p(s)}), $F(\vv)$ governs the system behavior in a similar manner, allbeit the only concern of $F(\vv)$ is the visible units:
+\begin{align}\label{eq:p(v)|fe}
+    \Pr(\vv) = \frac{e^{-F(\vv)}}{Z}, \quad\quad Z=\int_{\vv}{e^{-F(\vv)}}d\vv
+\end{align}
+It makes the aforementioned crude objective function expression more concise:
+\begin{align}\label{eq:l(v)3}
+  -\log{\Pr(\vv)} \approx F(\vv) - \frac{1}{|M|}\sum_{\vvt \in M}{F(\vvt)},
+\end{align}
+The update rules depends on the gradient of objective function with respect to the flexible parameters $\pEC$:
+\begin{align}\label{eq:gv4}
+  -\PDV{\log{\Pr(\vv)}}{\pEC} \approx \PDV{F(\vv)}{\pEC} - \PDV{\frac{1}{|M|}\sum_{\vvt \in M}{F(\vvt)}}{\pEC},
+\end{align}
+The negative log kernel of marginal probability $Pr(\vv)$, that is, the free energy, is simplified in a RBM:
+\begin{align*}
+  F(\vv) &= -\log{\sum_{\vh\in \{0,1\}^Q}{e^{\vb^T \vv + \vc^T \vh + \vh^T \mw \vv}}} \\
+         &= -\log{\left[ e^{\vb^T\vv}\sum_{\vh\in \{0,1\}^Q}{e^{\vh^T(\vc + \mw \vv)}} \right]} \\
+         &= -\vb^T\vv - \log{\sum_{\vh\in \{0,1\}^Q}{ \prod_{j=1}^Q{e^{h_j(c_j + \vw_j\vv)}} }}; \\
+  \textrm{and} \quad & \sum_{h_1, \dots h_Q \in \{0,1\}}{\prod_{j=1}^Q{e^{h_j(c_j + \vw_j\vv)}}} \\
+         &= (e^{c_1+\vw_1\vv}+e^{0}) \sum_{h_2 \dots h_Q \in\{0,1\}}{ \prod_{j=2}^Q{e^{h_j(c_j + \vw_j\vv)}} } \\
+         &= (e^{c_1+\vw_1\vv}+e^{0})(e^{c_2+\vw_2\vv}+e^{0}) \sum_{h_3 \dots h_Q \in\{0,1\}}{ \prod_{j=3}^Q{e^{h_j(c_j + \vw_j\vv)}} } \\
+         & \quad \vdots \\
+         &= (e^{c_1+\vw_1\vv}+e^{0})(e^{c_2+\vw_2\vv}+e^{0}) \dots (e^{c_Q+\vw_Q\vv}+e^{0}) \\
+         &= \prod_{j=1}^Q{(e^{c_j+\vw_j\vv} + 1)}; \\
+  \Rightarrow
+  F(\vv) &= -\vb^T\vv - \sum_{j=1}^Q{\log{(e^{c_j+\vw_j\vv} + 1)}} \numberthis \label{eq:fe_bin}.
+\end{align*}
+A symbolic library user should program the \textbf{free energy} function $F(\vv)$, the sampling procedure from $\Pr{\vv}$, the approximated crude lose (equation \ref{eq:l(v)3}), but leave the code of gradient function (equation \ref{eq:gv4}) for the library to automatically program, optimize, and even compile into low level machine language for best hardware utilization.
+%
 \singlespacing 
 \bibliographystyle{\style}
 \bibliography{ref}

@@ -139,7 +139,7 @@
 
 \section{Boltzmann Machine}
 \subsection{Concept}
-A Boltzmann Machine (BM) is an engergy based model for binary data generation process, who views the observed data as the fraction of a physics system on display. In the complete system, the observed $P$ dimensional data is in fact the realization of its $P$ visible units, denoted by vector $\vv$, besides which there are presumably $Q$ hidden units holding unobserved data, denoted by vector $\vh$. All units are allowed to connect with each other to form mutual dependencies, as Figure \ref{fig:gbm} illustrates.
+A Boltzmann Machine (BM) is an engergy based model for binary data generation process, who views the observed data as the fraction of a physics system on display. In the complete system, the observed $P$ dimensional data is in fact the realization of its $P$ visible units, denoted by vector $\vv$, besides which there are presumably $Q$ hidden units holding unobserved data, denoted by vector $\vh$. All units are allowed to connect with each other to form mutual dependencies, as Figure \ref{fig:gbm} illustrates:
 \begin{figure}[h]
   \centering
   \includegraphics[width=200px]{img/gbm.png}
@@ -155,7 +155,7 @@ which is a Boltzmann distribution that assigns lower engery states higher densit
 \begin{align*}\label{eq:e(s)} % system energy for generic boltzmann machine
     E(\vv, \vh) = E(\vs) = -\sum_{i=1}^{P+Q} b_i s_i - \sum_{1 = i < j}^{P+Q} s_i w_{ij} s_j \numberthis
 \end{align*}
-where $b_i$ is an offest, serving as the thresholds for the $i$ th unit to switch from ``off'' to ``on'' state; $w_ij$ is the connection between the $i$ th and $j$ th units. The first term depicts that an total energy no less than an unit's threshold is required to maintain that unit's ``on'' state; the second terms says that extra energy is required to sustain a active mutual connection when the two units at both ends are ``on''. The energy function is thus paramterized by $P+Q$ offsets and $P+Q \choose 2$ undirected connections, we represent them by $\pEC = \{b_i, m_{ij} | 1 \le i < j \le P+Q\}$. \\
+where $b_i$ is an offest, serving as the energy thresholds for the $i$ th unit to switch off; $w_ij$ is the connection between the $i$ th and $j$ th units. The first term depicts that $s_i$ is more likely to be ``on'' when $b_i$ is large, because of the difficulty for the system to jump out of any state that has $s_i$ being ``on'' (Eq.\,\ref{eq:p(s)}, \ref{eq:e(s)}). In other words, the system must supply $b_i$ energy in order to have a 50\%r chance of turning away from states having $s_i$ being ``on'', under the circumstances of no other unit interfering with $s_i$. The second terms tell the correlation between the two units at both ends. Large $w_{ij}$ indicate that the $i$ th and $j$ th units are likely to be seen taking opposing or identical state, depending on the sign of $w_{ij}$. When $w_{ij}$ is smaller, the two units are less correlated. The energy function is thus paramterized by $P+Q$ offsets and $P+Q \choose 2$ undirected connections, we represent them by $\pEC = \{b_i, m_{ij} | 1 \le i < j \le P+Q\}$. \\
 A1: The probability of a particular unit $s_k, (k = 1, \dots, P+Q)$ being turned on in the next stage is, given the current state of the rest of the system $\vs_{k-}$:
 \begin{equation}\label{eq:p(s_k=1)}
   \Pr(s_k = 1|\vs_{k-}) = \sigma(b_k + \sum_{i=1, i \ne k}^{P+Q}{s_i w_{ik}})
@@ -180,7 +180,7 @@ Proof: start by splitting the energy contributed by the $k$ th unit from the res
   & = \frac{1}{1 + e^{-b_k - \sum_{i=1, i \ne k}^{P+Q}{s_i w_{ik}}}} \\
   & = \sigma(b_k + \sum_{i=1, i \ne k}^{P+Q}{s_i w_{ik}})
 \end{align*}
-\subsection{Training of Boltzmann Machine}
+\subsection{MLE of Boltzmann Machine}
 The best interest is to fine tune the flexible parameters $\pEC=\{b_i, w_{ij} | 1 \le i < j \le P+Q \}$ in such a way that the odds of observing the $N$ empirical data points $\mv=[\vv_1, \dots, \vv_N]^T$ on the visible units are maximized, which is equivalent to maximizing the marginal Boltzman distribution $\Pr(\vv, \vh)$ over assignments of $\vh$:
 \begin{equation} \label{eq:p(v)}  % probability of observing a visible portion
   \begin{split}
@@ -282,13 +282,13 @@ The expansion of the one sample update rule to a batch of $N$ samples is straigh
 % new subsection
 \section{Restricted Boltzmann Machine}
 \subsection{Concept}
-In a generic Bolzmann Machine (GBM), all units are allowed to connect with each other, the preceding adjective ``Restricted'' highlights additional constraints that connection is forbidden among visible units, as well as among hidden units, while between the two full connection is still established, as Figure \ref{fig:rbm} illustrates:
+In a Bolzmann Machine (BM), units are fully connected with each other, the preceding ``Restricted'' highlights additional constraints that connection is forbidden among visible units, as well as among hidden units, while full connection is still established between the two, see Figure \ref{fig:rbm} for an illustration.
 \begin{figure}[h]
   \centering
   \includegraphics[width=100px]{img/rbm.png}
   \caption{The Restricted Boltzmann Machine.}\label{fig:rbm}
-\end{figure}
-Like the Boltzmann Machine (BM), the behavior of the system is still determined by the engergy function $E(\vv, \vh)$ parameterized by $\pEC$, now thanks to the restriction however, the terms concerning visible and hidden units can be factored out from each other:
+\end{figure} \\
+Like the more general Boltzmann Machine (BM), the behavior of a RBM system is still determined by the engergy function $E(\vv, \vh)$ parameterized by $\pEC$, now thanks to the restriction however, the terms concerning visible and hidden units can be factored out from each other:
 \begin{equation} \label{eq:rbm:e(s)}
   E(\vv, \vh) = -\sum_{i=1}^{P}{b_i v_i} - \sum_{j=1}^{Q}{c_j h_j} - \sum_{i=1}^P\sum_{j=1}^Q{v_i w_{ij} h_j} = -\vb^T \vv - \vc^T \vh - \vh^T \mw \vv,
 \end{equation}

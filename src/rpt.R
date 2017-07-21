@@ -94,13 +94,67 @@ plt.ssz <- function(su, grid=-log2(nhf)~mdl, out=NULL)
     invisible(g)
 }
 
+plt <- function(su, x.axi='r2', grid=-log2(nhf)~mdl, out=NULL)
+{
+    nm <- grep('^pvl', names(su), value=TRUE)
+    su <- reshape(su, nm, 'pow', 'test', direction='long')
+    su <- within(su, test <- sub('^pvl.', '', nm)[test])
+
+    ## order test types
+    od <- c(hof=1, rsd=2, dsg=3, ibs=4, xmx=5)
+    su <- within(su, test <- reorder(test, od[test]))
+    names(su)[names(su) == x.axi] = 'x'
+    
+    ## create title from constant fields
+    .u <- sapply(lapply(su, unique), length) == 1L
+    .u <- paste(names(su)[.u], sapply(su[.u], `[`, 1), sep='=', collapse=', ')
+
+    g <- ggplot(su)
+    if(!is.null(grid))
+    {
+        ## identify facets
+        .v <- all.vars(grid)
+        .t <- terms(grid)
+        if(length(.v) > 1 && attr(.t, 'response') > 0)
+        {
+            g <- g + facet_grid(grid)
+            gx <- length(unique(su[, .v[-1]]))
+            gy <- length(unique(su[, .v[+1]]))
+        }
+        else
+        {
+            g <- g + facet_wrap(grid)
+            gx <- length(unique(su[, .v]))
+            gy <- 1
+        }
+    }
+    else
+    {
+        gx <- 1
+        gy <- 1
+    }
+    
+    g <- g + geom_line(aes(x=x, y=pow, color=test))
+    g <- g + xlab(x.axi)
+    g <- g + ylab('pow')
+    g <- g + ggtitle(.u)
+    
+    gx <- 3 * gx + gx
+    gy <- 3 * gy + gy/2
+    if(!is.null(out))
+    {
+        ggsave(out, g, width=gx, height=gy)
+    }
+    invisible(g)
+}
+
 tmp <- function()
 {
-    r <- readRDS('rpt/s4_.rds')
+    r <- readRDS('rpt/s4b.rds')
     s <- sum.rpt(r)
     m=mdl~log2(2^10/nhf)
-    p=plt.ssz(subset(s, mdl=='g',   -c(pvl.dsg, pvl.xmx)), m, out='rpt/img/szz_gno_ibs.png')
-    p=plt.ssz(subset(s, mdl=='g*g', -c(pvl.dsg, pvl.xmx)), m, out='rpt/img/szz_gxg_ibs.png')
-    p=plt.ssz(subset(s, mdl=='g',   -c(pvl.ibs, pvl.xmx)), m, out='rpt/img/szz_gno_dsg.png')
-    p=plt.ssz(subset(s, mdl=='g*g', -c(pvl.ibs, pvl.xmx)), m, out='rpt/img/szz_gxg_dsg.png')
+    p=plt(subset(s, mdl=='g',   -c(pvl.dsg, pvl.xmx)), 'r2', m, out='rpt/img/rsq_gno_ibs.png')
+    p=plt(subset(s, mdl=='g*g', -c(pvl.dsg, pvl.xmx)), 'r2', m, out='rpt/img/rsq_gxg_ibs.png')
+    p=plt(subset(s, mdl=='g',   -c(pvl.ibs, pvl.xmx)), 'r2', m, out='rpt/img/rsq_gno_dsg.png')
+    p=plt(subset(s, mdl=='g*g', -c(pvl.ibs, pvl.xmx)), 'r2', m, out='rpt/img/rsq_gxg_dsg.png')
 }

@@ -150,11 +150,25 @@ plt <- function(su, x.axi='r2', grid=-log2(nhf)~mdl, out=NULL)
 
 tmp <- function()
 {
-    r <- readRDS('rpt/s4b.rds')
-    s <- sum.rpt(r)
     m=mdl~log2(2^10/nhf)
-    p=plt(subset(s, mdl=='g',   -c(pvl.dsg, pvl.xmx)), 'r2', m, out='rpt/img/rsq_gno_ibs.png')
-    p=plt(subset(s, mdl=='g*g', -c(pvl.dsg, pvl.xmx)), 'r2', m, out='rpt/img/rsq_gxg_ibs.png')
-    p=plt(subset(s, mdl=='g',   -c(pvl.ibs, pvl.xmx)), 'r2', m, out='rpt/img/rsq_gno_dsg.png')
-    p=plt(subset(s, mdl=='g*g', -c(pvl.ibs, pvl.xmx)), 'r2', m, out='rpt/img/rsq_gxg_dsg.png')
+
+    s <- sum.rpt(readRDS('rpt/rsq_gno_gau.rds'))
+    p1=plt(subset(s, mdl=='g', -c(pvl.dsg, pvl.xmx)), 'r2', m, out='rpt/img/rsq_gno_gau_ibs.png')
+    p2=plt(subset(s, mdl=='g', -c(pvl.ibs, pvl.xmx)), 'r2', m, out='rpt/img/rsq_gno_gau_dsg.png')
+    p3=plt(subset(s, mdl=='g', -c(pvl.ibs, pvl.dsg)), 'r2', m, out='rpt/img/rsq_gno_gau_xmx.png')
+
+    s <- sum.rpt(readRDS('rpt/rsq_gxg_gau.rds'))
+    p1=plt(subset(s, mdl=='g*g', -c(pvl.dsg, pvl.xmx)), 'r2', m, out='rpt/img/rsq_gxg_gau_ibs.png')
+    p2=plt(subset(s, mdl=='g*g', -c(pvl.ibs, pvl.xmx)), 'r2', m, out='rpt/img/rsq_gxg_gau_dsg.png')
+    p3=plt(subset(s, mdl=='g*g', -c(pvl.ibs, pvl.dsg)), 'r2', m, out='rpt/img/rsq_gxg_gau_xmx.png')
+
+    s <- sum.rpt(readRDS('rpt/rsq_gxg_fp1.rds'))
+    p1=plt(subset(s, mdl=='g*g', -c(pvl.dsg, pvl.xmx)), 'r2', m, out='rpt/img/rsq_gxg_fp1_ibs.png')
+    p2=plt(subset(s, mdl=='g*g', -c(pvl.ibs, pvl.xmx)), 'r2', m, out='rpt/img/rsq_gxg_fp1_dsg.png')
+    p3=plt(subset(s, mdl=='g*g', -c(pvl.ibs, pvl.dsg)), 'r2', m, out='rpt/img/rsq_gxg_fp1_xmx.png')
+
+    s <- sum.rpt(readRDS('rpt/rsq_gxg_sin.rds'))
+    p1=plt(subset(s, mdl=='g*g', -c(pvl.dsg, pvl.xmx)), 'r2', m, out='rpt/img/rsq_gxg_sin_ibs.png')
+    p2=plt(subset(s, mdl=='g*g', -c(pvl.ibs, pvl.xmx)), 'r2', m, out='rpt/img/rsq_gxg_sin_dsg.png')
+    p3=plt(subset(s, mdl=='g*g', -c(pvl.ibs, pvl.dsg)), 'r2', m, out='rpt/img/rsq_gxg_sin_xmx.png')
 }

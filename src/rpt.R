@@ -15,24 +15,22 @@ cat.rpt <- function(fr, bind=1)
     dt
 }
 
-.power <- function(p, thd=.05) sum(p < thd, na.rm=T) / sum(!is.na(p))
-
 sum.rpt <- function(r)
 {
-    .power <- function(p) sum(p < .05, na.rm=T) / sum(!is.na(p))
+    .pw <- function(p) sum(p < .05, na.rm=T) / sum(!is.na(p))
     r$fnm <- NULL
+    r$seq <- NULL
     pv.keys <- grep('^pvl', names(r), value=T)
     dt.keys <- c(pv.keys, 'ngv', 'eot', 'eov')
     ix.keys <- names(r)[!names(r) %in% dt.keys]
     ix <- r[, ix.keys]
     su <- by(r, ix, function(r)
     {
-        pow <- lapply(r[, pv.keys], .power)
+        pow <- lapply(r[, pv.keys], .pw)
         r <- data.frame(
             r[1, ix.keys],
             pow,
             itr = nrow(r),
-            ## avg.eov=mean(r$eov),
             stringsAsFactors=F)
         r
     })
@@ -41,69 +39,19 @@ sum.rpt <- function(r)
     su
 }
 
-plt.ssz <- function(su, grid=-log2(nhf)~mdl, out=NULL)
+plt <- function(su, x.axi='r2', grid=nhf~mdl, x.cat=F, out=NULL)
 {
     nm <- grep('^pvl', names(su), value=TRUE)
     su <- reshape(su, nm, 'pow', 'test', direction='long')
     su <- within(su, test <- sub('^pvl.', '', nm)[test])
-
-    ## order test types
-    od <- c(hof=1, rsd=2, dsg=3, ibs=4, xmx=5)
-    su <- within(su, test <- reorder(test, od[test]))
-    
-    ## create title from constant fields
-    .u <- sapply(lapply(su, unique), length) == 1L
-    .u <- paste(names(su)[.u], sapply(su[.u], `[`, 1), sep='=', collapse=', ')
-
-    g <- ggplot(su)
-    if(!is.null(grid))
-    {
-        ## identify facets
-        .v <- all.vars(grid)
-        .t <- terms(grid)
-        if(length(.v) > 1 && attr(.t, 'response') > 0)
-        {
-            g <- g + facet_grid(grid)
-            gx <- length(unique(su[, .v[-1]]))
-            gy <- length(unique(su[, .v[+1]]))
-        }
-        else
-        {
-            g <- g + facet_wrap(grid)
-            gx <- length(unique(su[, .v]))
-            gy <- 1
-        }
-    }
-    else
-    {
-        gx <- 1
-        gy <- 1
-    }
-    
-    g <- g + geom_line(aes(x=ssz, y=pow, color=test))
-    g <- g + xlab('ssz')
-    g <- g + ylab('pow')
-    g <- g + ggtitle(.u)
-    
-    gx <- 3 * gx + gx
-    gy <- 3 * gy + gy/2
-    if(!is.null(out))
-    {
-        ggsave(out, g, width=gx, height=gy)
-    }
-    invisible(g)
-}
-
-plt <- function(su, x.axi='r2', grid=-log2(nhf)~mdl, out=NULL)
-{
-    nm <- grep('^pvl', names(su), value=TRUE)
-    su <- reshape(su, nm, 'pow', 'test', direction='long')
-    su <- within(su, test <- sub('^pvl.', '', nm)[test])
+    su$id <- NULL
 
     ## order test types
     od <- c(hof=1, rsd=2, dsg=3, ibs=4, xmx=5)
     su <- within(su, test <- reorder(test, od[test]))
     names(su)[names(su) == x.axi] = 'x'
+    if(x.cat)
+        su$x <- as.factor(su$x)
     
     ## create title from constant fields
     .u <- sapply(lapply(su, unique), length) == 1L
@@ -134,7 +82,7 @@ plt <- function(su, x.axi='r2', grid=-log2(nhf)~mdl, out=NULL)
         gy <- 1
     }
     
-    g <- g + geom_line(aes(x=x, y=pow, color=test))
+    g <- g + geom_line(aes(x=x, y=pow, color=test, group=test))
     g <- g + xlab(x.axi)
     g <- g + ylab('pow')
     g <- g + ggtitle(.u)
@@ -150,12 +98,12 @@ plt <- function(su, x.axi='r2', grid=-log2(nhf)~mdl, out=NULL)
 
 tmp <- function()
 {
-    m=mdl~log2(2^10/nhf)
+    m=mdl~nhf
 
-    s <- sum.rpt(readRDS('rpt/rsq_gno_gau.rds'))
-    p1=plt(subset(s, mdl=='g', -c(pvl.dsg, pvl.xmx)), 'r2', m, out='rpt/img/rsq_gno_gau_ibs.png')
-    p2=plt(subset(s, mdl=='g', -c(pvl.ibs, pvl.xmx)), 'r2', m, out='rpt/img/rsq_gno_gau_dsg.png')
-    p3=plt(subset(s, mdl=='g', -c(pvl.ibs, pvl.dsg)), 'r2', m, out='rpt/img/rsq_gno_gau_xmx.png')
+    s <- sum.rpt(readRDS('rpt/rsq_ggg_gau.rds'))
+    p1=plt(subset(s, se=-c(pvl.dsg, pvl.xmx)), 'r2', m, out='rpt/img/rsq_ggg_gau_ibs.png')
+    p2=plt(subset(s, se=-c(pvl.ibs, pvl.xmx)), 'r2', m, out='rpt/img/rsq_ggg_gau_dsg.png')
+    p3=plt(subset(s, se=-c(pvl.ibs, pvl.dsg)), 'r2', m, out='rpt/img/rsq_ggg_gau_xmx.png')
 
     s <- sum.rpt(readRDS('rpt/rsq_gxg_gau.rds'))
     p1=plt(subset(s, mdl=='g*g', -c(pvl.dsg, pvl.xmx)), 'r2', m, out='rpt/img/rsq_gxg_gau_ibs.png')

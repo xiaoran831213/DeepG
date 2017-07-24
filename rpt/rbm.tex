@@ -326,8 +326,7 @@ We are done with (\ref{eq:rbm:p(v|h)}), similar argument and the same relabeling
   -\PDV{\log{\Pr(\vv)}}{c_j} & = \mean{h_j}{\vh|\vv} - \mean{h_j}{\vvt, \vht}; \\
   \textrm{where } i & = 1, \dots, P;\, j = 1, \dots, Q.
 \end{align*}
-
-Now we are ready to write down the RBM training algorithm based on one sample:
+Seeing RBM as a special case of BM, we can simplify the one sample training algorithm for BM into a faster algorithm for RBM:
 \begin{algorithm}[h]
   \caption{One sample update rule for Restricted Boltzmann Machine}\label{alg:rbm1}
   \begin{algorithmic}[1]
@@ -361,13 +360,51 @@ Now we are ready to write down the RBM training algorithm based on one sample:
     \State \Return $-\Delta \mw$, $-\Delta \vb$, and $-\Delta \vc$
   \end{algorithmic}
 \end{algorithm} \\
-% 
-\section{MLE with Symbolic Library}
-The primative update rules are necessary for developing a BM trainer from scratch, in case of available symbolic mathematics libraries however, such as Python-Theano and Matlab-Symbolic, it is often unnecessary, or even over-developing to implement the primative rules in equation (\ref{eq:gv3}) directly. Instead, it would be more efficient and easier to just construct a crude objective function, let the software packages to figure out the gradient function, and subsequently, the update rules.
-Review the negative log likelihood gradient in equation (\ref{eq:gv1}), we see the crude objective function to be minimized with respect to $\pEC$ is
-\begin{align}\label{eq:l(v)1}
-  -\log{\Pr(\vv)} = -\log{\int_{\vh}{e^{-E(\vv, \vh)}d\vh}} + \mean{\log{\int_{\vh}{e^{-E(\vvt, \vh)}d\vh}}}{\vvt}
+Despite the positive phase omitting the burn in period, and the time to advance a system state being shortened in general compared to BMs of the same scale, the positive phase still relies limited sampling to approximate an expected value over all assembles of hidden units, which, in case of a RBM, can be simplifed into a close form.
+%
+\subsection{RBM simplified}
+This can be done for a RBM due to the separation of visible and hidden unit states in its energy formular (Eq.\,\ref{eq:rbm:e(s)}), and the binary nature of all units. Review the gradient of negative log likelihood for empirical data posted on its visible units (Eq.\,\ref{eq:gv1}) and the energy function of a RBM (Eq.\,\ref{eq:rbm:e(s)}), the objective function to be minimized with respect to machine parameters $\pEC$ has a simplified form:
+\begin{align}\label{eq:rbm:l(v)}
+  -\log{\Pr(\vv)} = -e^{\vv^T\vb} - \sum_{j=1}^Q{\log{(e^{c_j + \vv^T\vw_j}+1)}} + \mean{e^{\vvt^T\vb} + \sum_{j=1}^Q{\log{(e^{c_j + \vvt^T\vw_j}+1)}}}{\vvt}
 \end{align}
+The positive phase can be accurately calculated in roughly $O(NM)$ steps, similar to the load of a single layered feed forward neural network, and much less than $O[(N+M)^2]$ should the same be done with a generic BM.\\
+\textbf{Derivation of Eq.\,{\eqref{eq:rbm:l(v)}}}: \\
+Plug RBM energy (Eq.\,\ref{eq:rbm:e(s)}) into crude gradient (Eq.\,\ref{eq:gv1}) we have:
+\begin{align*}
+  -\PDV{\log{\Pr(\vv)}}{\pEC} = -\PDV{\log{\int_{\vh}{e^{\vv^T\vb + \vc^T\vh + \vv^T\mw\vh}d\vh}}}{\pEC} + \PDV{\mean{\log{\int_{\vh}{e^{\vv^T\vbt + \vc^T\vh + \vvt^T\mw\vh}d\vh}}}{\vvt}}{\pEC},
+\end{align*}
+We only have to deal with positive phase since the negative phase has taken an identical form; from the energy function, factor out terms not involving the hidden units:
+\begin{align*}
+  -\log{\int_{\vh}{e^{\vv^T\vb + \vc^T\vh + \vv^T\mw\vh}} d\vh} = -e^{\vv^T\vb} - \log{\int_{\vh}{e^{(\vc + \vv^T\mw)\vh}} d\vh};
+\end{align*}
+terms left in the energy function do not involve product bwteeen hidden units (RBM prohibits hidden-hidden connection), therefore the contribution of each hidden unit to the integral is separable; also take advantage of the fact that units in the RBM are binary, thus the integral over the $j$ th. hidden units $h_j$ only involves summation over two condictions: $h_j=0$ and $h_j=1$:
+\begin{align*}
+  \int_{\vh}{e^{(\vc + \vv^T\mw)\vh}} d\vh
+  & = \int_{(h_1, \dots, h_Q)} \left[\exp{\sum_{j=1}^Q{(c_j + \vv^T\vw_j)h_j}} \right] d(h_1, \dots, h_Q) \\
+  & = \int_{h_1}e^{(c_1 + \vv^T\vw_1)h_1}                 \int_{h_2}e^{(c_2 + \vv^T\vw_2)h_2} \int_{h_3} \dots \int_{h_Q}e^{(c_Q + \vv^T\vw_Q)h_Q} dh_Q \dots dh_3\,dh_2\,dh_1 \\
+  & = (e^{c_1+\vv^T\vw_1}+e^0)                            \int_{h_2}e^{(c_2 + \vv^T\vw_2)h_2} \int_{h_3} \dots \int_{h_Q}e^{(c_Q + \vv^T\vw_Q)h_Q} dh_Q \dots dh_3\,dh_2 \\
+  & = (e^{c_1+\vv^T\vw_1}+e^0)                            (e^{c_2+\vv^T\vw_2} + e^0)          \int_{h_3} \dots \int_{h_Q}e^{(c_Q + \vv^T\vw_Q)h_Q} dh_Q \dots dh_3 \\
+  & \quad \vdots \\
+  & = \prod_{j=1}^Q{(e^{c_j + \vv^T\vw_j}+1)},
+\end{align*}
+where $\vw_j$ is the $j$ th column in the $P \times Q$ connection (weight) matrix $\mw$. Now we have
+\begin{align*}
+  -\log{\int_{\vh}{e^{-E(\vv, \vh)}} d\vh} = -e^{\vv^T\vb} - \sum_{j=1}^Q{\log{(e^{c_j + \vv^T\vw_j}+1)}}.
+\end{align*}
+It is easy to derive the gradient of positive phase w.r.t. $\pEC=\{\vb, \vc, \mw\}$:
+\begin{align*}
+  -\PDV{\log{\int_{\vh} e^{-E(\vv, \vh)}} d\vh}{\vw_j}
+  & = -\frac{\vv^T e^{c_j + \vv^T\vw_j}}{e^{c_j + \vv^T\vw_j}+1} = -\vv\sigma(c_j + \vv^T\vw_j) \\
+  \Rightarrow -\PDV{\log{\int_{\vh} e^{-E(\vv, \vh)}} d\vh}{\mw}
+  & = -\vv\sigma(\vc^T + \vv^T\mw) \\
+  -\PDV{\log{\int_{\vh} e^{-E(\vv, \vh)}} d\vh}{c_j}
+  & = -\frac{c_j e^{c_j + \vv^T\vw_j}}{e^{c_j + \vv^T\vw_j}+1} = -c_j\sigma(c_j + \vv^T\vw_j) \\
+  \Rightarrow -\PDV{\log{\int_{\vh} e^{-E(\vv, \vh)}} d\vh}{\vc}
+  & = \diag{\vc} \sigma(\vc + \vv^T\mw)
+\end{align*}
+The negative phase can be done in exactly the same way plus the sum rule in differentiation. 
+\subsection{RBM with Symbolic Library}
+The primative update rules are necessary for developing both BM and RBM trainer from scratch, in case of available symbolic mathematics libraries however, such as Python-Theano and Matlab-Symbolic, it is often unnecessary, or even over-developing to implement the primative rules in Eq.\,\eqref{eq:gv3} directly through algorithm \eqref{alg:gbm1} and \eqref{alg:rbm1} . Instead, it would be more efficient and easier to just construct a crude objective function, then let the software packages to figure out the gradient, and subsequently, the update rules. 
 which involves the mean of marginal distribution $\Pr(\vvt)$, posing a severe challenge to direct evaluation attempt, we instead resort to approximation via limited sampling from $\Pr(\vvt)$:
 \begin{align}\label{eq:l(v)2}
   -\log{\Pr(\vv)} \approx -\log{\int_{\vh} e^{-E(\vv, \vh)} d\vh} + \frac{1}{|M|}\sum_{\vvt \in M}{\log{\int_{\vh} e^{-E(\vvt, \vh)}d\vh}}
@@ -393,8 +430,8 @@ The update rules depends on the gradient of objective function with respect to t
 The negative log kernel of marginal probability $Pr(\vv)$, that is, the free energy, is simplified in a RBM:
 \begin{align*}
   F(\vv) &= -\log{\sum_{\vh\in \{0,1\}^Q}{e^{\vb^T \vv + \vc^T \vh + \vh^T \mw \vv}}} \\
-         &= -\log{\left[ e^{\vb^T\vv}\sum_{\vh\in \{0,1\}^Q}{e^{\vh^T(\vc + \mw \vv)}} \right]} \\
-         &= -\vb^T\vv - \log{\sum_{\vh\in \{0,1\}^Q}{ \prod_{j=1}^Q{e^{h_j(c_j + \vw_j\vv)}} }}; \\
+         &= -\log{\left[ e^{\vv^T\vb}\sum_{\vh\in \{0,1\}^Q}{e^{\vh^T(\vc + \mw \vv)}} \right]} \\
+         &= -\vv^T\vb - \log{\sum_{\vh\in \{0,1\}^Q}{ \prod_{j=1}^Q{e^{h_j(c_j + \vw_j\vv)}} }}; \\
   \textrm{and} \quad & \sum_{h_1, \dots h_Q \in \{0,1\}}{\prod_{j=1}^Q{e^{h_j(c_j + \vw_j\vv)}}} \\
          &= (e^{c_1+\vw_1\vv}+e^{0}) \sum_{h_2 \dots h_Q \in\{0,1\}}{ \prod_{j=2}^Q{e^{h_j(c_j + \vw_j\vv)}} } \\
          &= (e^{c_1+\vw_1\vv}+e^{0})(e^{c_2+\vw_2\vv}+e^{0}) \sum_{h_3 \dots h_Q \in\{0,1\}}{ \prod_{j=3}^Q{e^{h_j(c_j + \vw_j\vv)}} } \\
@@ -402,7 +439,7 @@ The negative log kernel of marginal probability $Pr(\vv)$, that is, the free ene
          &= (e^{c_1+\vw_1\vv}+e^{0})(e^{c_2+\vw_2\vv}+e^{0}) \dots (e^{c_Q+\vw_Q\vv}+e^{0}) \\
          &= \prod_{j=1}^Q{(e^{c_j+\vw_j\vv} + 1)}; \\
   \Rightarrow
-  F(\vv) &= -\vb^T\vv - \sum_{j=1}^Q{\log{(e^{c_j+\vw_j\vv} + 1)}} \numberthis \label{eq:fe_bin}.
+  F(\vv) &= -\vv^T\vb - \sum_{j=1}^Q{\log{(e^{c_j+\vw_j\vv} + 1)}} \numberthis \label{eq:fe_bin}.
 \end{align*}
 A symbolic library user should program the \textbf{free energy} function $F(\vv)$, the sampling procedure from $\Pr{\vv}$, the approximated crude lose (equation \ref{eq:l(v)3}), but leave the code of gradient function (equation \ref{eq:gv4}) for the library to automatically program, optimize, and even compile into low level machine language for best hardware utilization.
 %

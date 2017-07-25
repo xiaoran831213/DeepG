@@ -12,6 +12,19 @@
 \usepackage{algpseudocode}
 \usepackage{algorithm}
 %
+% enable numbered boxes, with caption and label.
+\makeatletter
+\newcommand\fs@boxedtop
+{
+  \fs@boxed
+  \def\@fs@mid{\vspace\abovecaptionskip\relax}
+  \let\@fs@iftopcapt\iftrue
+}
+\makeatother
+\floatstyle{boxedtop}
+\floatname{framedbox}{Box}
+\newfloat{framedbox}{tbp}{lob}
+%
 % Text layout
 \topmargin -1.5cm
 \oddsidemargin 0.0cm
@@ -32,7 +45,7 @@
 \newcommand{\bs}{\boldsymbol}
 \newcommand{\mean}[2]{\left\langle{#1}\right\rangle_{#2}}
 \newcommand\numberthis{\addtocounter{equation}{1}\tag{\theequation}}
-% 
+%
 % vectors and matrices
 \newcommand{\vb}{\boldsymbol{b}}
 \newcommand{\vc}{\boldsymbol{c}}
@@ -101,6 +114,8 @@
 % 
 % assign to diagnoral
 \newcommand{\diag}[1]{\text{diag} (#1)}
+% identity matrix
+\newcommand{\im}{\textrm{\textbf{I}}}
 % 
 % declarations
 % argument of the minimum / maximum
@@ -155,8 +170,9 @@ which is a Boltzmann distribution that assigns lower engery states higher densit
 \begin{align*}\label{eq:e(s)} % system energy for generic boltzmann machine
     E(\vv, \vh) = E(\vs) = -\sum_{i=1}^{P+Q} b_i s_i - \sum_{1 = i < j}^{P+Q} s_i w_{ij} s_j \numberthis
 \end{align*}
-where $b_i$ is an offest, serving as the energy thresholds to ``turn off'' the $i$ th unit $s_i$; $w_{ij}$ is the connection between the $i$ th and $j$ th units. The first term depicts that $s_i$ is more likely to stay ``on'' if $b_i$ is larger, because a system state that already has $s_i$ ``on'' demands lower energy to maintain (Eq.\,\ref{eq:e(s)}), it is therefore less likely for the system to jump out of such a state (Eq.\,\ref{eq:p(s)}); another way to see it, is that for the system to own a fair (50\%) chance of turning off $s_i$ under no interference form the other units, it must raise an extra $b_i$ energy. The second terms mode the mutual between $s_i$ and the others. Stronger connection promote binary agreement (when positive) or opposition (when negative) between $s_i$ and $s_j$, whereas weaker connection diminishes the mutual influcene between the two. The energy function is thus paramterized by $P+Q$ offsets and $P+Q \choose 2$ undirected connections, we represent them by $\pEC = \{b_i, m_{ij} | 1 \le i < j \le P+Q\}$. \\
-A1: The probability of a particular unit $s_k, (k = 1, \dots, P+Q)$ being turned on in the next stage is, given the current state of the rest of the system $\vs_{k-}$:
+where $b_i$ is an offest, serving as the energy thresholds to ``turn off'' the $i$ th unit $s_i$; $w_{ij}$ is the connection between the $i$ th and $j$ th units. The first term depicts that $s_i$ is more likely to stay ``on'' if $b_i$ is larger, because a system state that already has $s_i$ ``on'' demands lower energy to maintain (Eq.\,\ref{eq:e(s)}), it is therefore less likely for the system to jump out of such a state (Eq.\,\ref{eq:p(s)}); another way to see it, is that for the system to own a fair (50\%) chance of turning off $s_i$ under no interference form the other units, it must raise an extra $b_i$ energy. The second terms mode the mutual between $s_i$ and the others. Stronger connection promote binary agreement (when positive) or opposition (when negative) between $s_i$ and $s_j$, whereas weaker connection diminishes the mutual influcene between the two. The energy function is thus paramterized by $P+Q$ offsets and $P+Q \choose 2$ undirected connections, we represent them by $\pEC = \{b_i, m_{ij} | 1 \le i < j \le P+Q\}$.
+\subsection{Evolution of Bolztmann Machine}
+The probability of a particular unit $s_k, (k = 1, \dots, P+Q)$ being turned on in the next stage is, given current state of the other units $\vs_{k-}$:
 \begin{equation}\label{eq:p(s_k=1)}
   \Pr(s_k = 1|\vs_{k-}) = \sigma(b_k + \sum_{i=1, i \ne k}^{P+Q}{s_i w_{ik}})
 \end{equation}
@@ -178,8 +194,44 @@ Proof: start by splitting the energy contributed by the $k$ th unit from the res
   & = \frac{e^{-E(s_k)}|_{s_k=1}}{e^{-E(\st_k)}|_{\st_k=1} + e^{-E(\st_k)}|_{\st_k=0}} \\
   & = \frac{e^{b_k + \sum_{i=1, i \ne k}^{P+Q}{s_i w_{ik}}}}{e^{b_k + \sum_{i=1, i \ne k}^{P+Q}{s_i w_{ik}}} + e^{0}} \\
   & = \frac{1}{1 + e^{-b_k - \sum_{i=1, i \ne k}^{P+Q}{s_i w_{ik}}}} \\
-  & = \sigma(b_k + \sum_{i=1, i \ne k}^{P+Q}{s_i w_{ik}})
+  & = \sigma(b_k + \sum_{i=1, i \ne k}^{P+Q}{s_i w_{ik}}).
 \end{align*}
+\begin{framedbox}[h]
+  \caption{Attempt to vecterize a Boltzmann Machine} \label{box:vgbm}
+  \centering
+  \begin{minipage}{1\linewidth}
+    \small It might be tempting to simultaneously evaluate Eq.\,\eqref{eq:p(s_k=1)} for all or a batch units so the system state can be advanced faster, given the abundance of modern computation packages
+    (e.g.\,\textbf{R}, \textbf{Python-Numpy}, \textbf{Matlab}, etc.) that support highly optimized linear algebra operation, tensor broadcasting, and transparent parallelism on multi-processor hardware,
+    such that
+    \begin{equation*}
+      \left[
+        \begin{array}{c}
+          \Pr(s_1^{(t+1)} = 1)   \\
+          \Pr(s_2^{(t+1)} = 1)   \\
+          \vdots \\
+          \Pr(s_k^{(t+1)} = 1)   \\
+          \vdots \\
+          \Pr(s_K^{(t+1)} = 1)
+        \end{array}
+      \right] =
+      \left[
+        \begin{array}{c}
+          \sigma(b_1 + \sum_{i \ne 1}^K{s_i^{(t)} w_{i,1}}) \\
+          \sigma(b_2 + \sum_{i \ne 2}^K{s_i^{(t)} w_{i,2}}) \\
+          \vdots \\
+          \sigma(b_k + \sum_{i \ne k}^K{s_i^{(t)} w_{i,k}}) \\
+          \vdots \\
+          \sigma(b_K + \sum_{i \ne K}^K{s_i^{(t)} w_{i,K}}) \\
+        \end{array}
+      \right] = \sigma(\vb + \mw\vs^{(t)}),
+    \end{equation*}
+    where $K=P+Q$ is the total number of units in the system; $\vb$ is the $K$ dimensional vector of unit biases; $\mw$ is the $K \times K$ symmetric, 0 diagonal, undirected graph matrix, whose $(i, j)$ th
+    entry (as well as the $(j, i)$ th) gives the connection between unit $i$ and $j$ when $i \ne j$; $\vs^{(t+1)}$ and $\vs^{(t)}$ denote the system state in the next and current stages, respectively. This
+    vecterized operation is commonly one line of coding by most of the aforementioned tools. \\
+    This is rendered futile, however, by the fact that all units are fully connected, which means altering one affects the activation probability of the rest. Therefore, to run a Boltzmann Machine we have to
+    evolve the units one by one. Experiments shows advancing all units together causes the system to diverge - it will not reach thermal equilibrium.    
+  \end{minipage}
+\end{framedbox}
 \subsection{MLE of Boltzmann Machine}
 The best interest is to fine tune the flexible parameters $\pEC=\{b_i, w_{ij} | 1 \le i < j \le P+Q \}$ in such a way that the odds of observing the $N$ empirical data points $\mv=[\vv_1, \dots, \vv_N]^T$ on the visible units are maximized, which is equivalent to maximizing the marginal Boltzman distribution $\Pr(\vv, \vh)$ over assignments of $\vh$:
 \begin{equation} \label{eq:p(v)}  % probability of observing a visible portion
@@ -222,7 +274,7 @@ The above gradient form (\ref{eq:gv1}) is not ideal for direct implementation, s
   & = -\int_{\vh} \frac{\Pr(\vv, \vh)}{\Pr(\vv)} \PDV{E(\vv, \vh)}{\pEC} d\vh \\
   & = -\int_{\vh} \Pr(\vh | \vv) \PDV{E(\vv, \vh)}{\pEC}  d\vh \\
   & = -\mean{\PDV{E(\vv, \vh)}{\pEC}}{\vh|\vv} \\
-  \textrm{Negative Phase:}
+  \textrm{Negative Phase:}p
   & \\
   \PDV{\mean{\log{\int_{\vht}{e^{-E(\vvt, \vht)}d\vht}}}{\vvt}}{\pEC}
   &= \mean{\PDV{\log{\int_{\vht}{e^{-E(\vvt, \vht)}d\vht}}}{\pEC}}{\vvt} \\
@@ -233,7 +285,7 @@ Thus we could rewrite ({\ref{eq:gv1}) in terms of expected value:
 \begin{align} \label{eq:gv2}
   -\PDV{\log{\Pr(\vv)}}{\pEC} = \mean{\PDV{E(\vv, \vh)}{\pEC}}{\vh|\vv} - \mean{\PDV{E(\vvt, \vht)}{\pEC}}{\vvt, \vht}
 \end{align}
-The gradients still exists on the right side, but it only involves energy function itself without either logarithm or exponentiation. The positive and negative phases (see \ref{eq:gv1}) are now re-expressed by two expectation terms, which is commonly referred as \textbf{data} phase and \textbf{model} phase, because the former is influenced by imperically observed data $\vv$ through conditioning, and the later entirely relying on a Boltzmann Machine runing freely without the interference of any substantial reality. From the above equation (\ref{eq:gv2}) we can now reinterprete the update rules by viewing the ``loss'' as the difference of expected energy between a system ``forced'' to generate observed $\vv$ on its $P$ visible units, and another system of identical topology but freely operate without any constraint. Therefore, minimizing this difference via its negative gradient w.r.t. machine parameters $pEC={\mw, \vb}$, amounts to urge the machine to generate $\vvt$ on its own, thus mimicking the nature process that had given rise to the training material we observed, and hopefully achieving satisfying generalization performance with the aid of hidden units.
+The gradients still exists on the right side, but it only involves energy function itself without either logarithm or exponentiation. The positive and negative phases (see \ref{eq:gv1}) are now re-expressed by two expectation terms, which is commonly referred as \textbf{data} phase and \textbf{model} phase, because the former is influenced by imperically observed data $\vv$ through conditioning, and the later entirely relying on a Boltzmann Machine runing freely without the interference of any substantial reality. From the above equation (\ref{eq:gv2}) we can now reinterprete the update rules by viewing the ``loss'' as the difference of expected energy between a system ``forced'' to generate observed $\vv$ on its $P$ visible units, and another system of identical topology but freely operate without any constraint. Therefore, minimizing this difference via its negative gradient w.r.t. machine parameters $\pEC=\{\mw, \vb\}$, amounts to urge the machine to generate $\vvt$ on its own, thus mimicking the nature process that had given rise to the training material we observed, and hopefully achieving satisfying generalization performance with the aid of hidden units.
 Now, taking advantage of the simple form of energy function for a Boltzmann distribution (see \ref{eq:e(s)}), we immediately see
 \begin{align} \label{eq:ge}
   \PDV{E(\vs)}{w_{ij}} = s_i s_j,  \quad \PDV{E(\vs)}{b_i} = s_i, \quad  (1 \le i < j \le P+Q)
@@ -244,7 +296,7 @@ Joint (\ref{eq:ge}) and (\ref{eq:gv2}) we get the primative update rules for the
   -\PDV{\log{\Pr(\vv)}}{b_i}    &= \mean{s_i}{\vh|\vv} - \mean{s_i}{\vvt, \vht} \numberthis \\
   \textrm{where }               & 1 \le i < j \le P+Q.
 \end{align*}
-The interpretation of update rules are quiet straight forward, for $w_{ij}$, the connection between $s_i$ and $s_j$, it is the difference of unit $i$ and $j$'s covariance between a system clumped on visible units and the same system that has been set free; as for $b_i$, the unit offset (activation threshold) of $s_i$, the update is the difference of mean value on the $i$ th unit, between a clumped and free run systems. At this point, we are readly to write the update algorithm of a Bolztmann Machine based on one sample:
+The interpretation of update rules are straight forward, for $w_{ij}$ - the connection between $s_i$ and $s_j$, it is the difference of unit $i$ and $j$'s covariance between a system whose visible units are clumped on empirical sample, and the same system that has been set for free run; as for $b_i$ - the unit offset (de-activation threshold) of $s_i$, the update rule is the difference of mean value on the $i$ th unit, between the clumped system and same systems freely run. At this point, we are readly to write down the one sample MLE algorithm for a Bolztmann Machine:
 \begin{algorithm}[h]
   \caption{One sample update rule for Boltzmann Machine}\label{alg:gbm1}
   \begin{algorithmic}[1]
@@ -287,45 +339,79 @@ In a Bolzmann Machine (BM), units are fully connected with each other, the prece
   \centering
   \includegraphics[width=100px]{img/rbm.png}
   \caption{The Restricted Boltzmann Machine.}\label{fig:rbm}
-\end{figure} \\
-Like the more general Boltzmann Machine (BM), the behavior of a RBM system is still determined by the engergy function $E(\vv, \vh)$ parameterized by $\pEC$, now thanks to the restriction however, the terms concerning visible and hidden units can be factored out from each other:
+\end{figure}
+\subsection{Thermal dynamics of a RBM}
+Much like the more general Boltzmann Machine (BM), the behavior of a RBM system is also governed by an engergy function $E(\vv, \vh)$ parameterized by unit biasis and inter-unit connections of similar depiction:
 \begin{equation} \label{eq:rbm:e(s)}
-  E(\vv, \vh) = -\sum_{i=1}^{P}{b_i v_i} - \sum_{j=1}^{Q}{c_j h_j} - \sum_{i=1}^P\sum_{j=1}^Q{v_i w_{ij} h_j} = -\vb^T \vv - \vc^T \vh - \vh^T \mw \vv,
+  E(\vv, \vh) = -\sum_{i=1}^{P}{b_i v_i} - \sum_{j=1}^{Q}{c_j h_j} - \sum_{i=1}^P\sum_{j=1}^Q{v_i w_{ij} h_j} = -\vv^T\vb - \vc^T\vh - \vv^T \mw \vh,
 \end{equation}
-where $b_i$ tells the energy taken away from the system when the $i$ th visible units $v_i$ is ``on'' (or extra energy required in order to have a fair chance turning it off), that is, larger $b_i, (i=1, \dots, P)$ means lower total energy when $v_i$ is ``on'', making any state with $v_i=1$ more stable (i.e.,\,more likely to be observed); $c_j$ is interpreted quite the same, larger $c_j, (j=1, \dots, Q)$ make states having $h_j$ turned ``on'' relatively harder to turn away from, implying higher chance to observe $h_j=1$. As for the connection $w_{ij}$ between the $i$ th visible and $j$ th hidden units, visualized by the edges in Figure \ref{fig:rbm}, a large value either encourages (when positive) or prohibits (when negative) co-activation of $v_i$ and $h_j$, conversely, a small $w_{ij}$ diminish mutual dependency of the two.
-\subsection{MLE for RBM}
-Much like the BM, the goal of tuning a RBM is to maximum the chance of presenting $P$ dimensional emprical observations on its visible units, which is transfered into minimizing the marginal probability of an visible assignment $\vv$ in the the negative log scale. RBM shares the same gradient form with BM, both involve the intractable calculation of the expected values of a full Bolztmann distribution and its conditional form on observed values (equation \ref{eq:gv3}). However, exploitating the visible - visible and hidden - hidden independence (figure \ref{fig:rbm}), the thermal dynamics of a RBM can be simulated by batches instead of one dimension at a time (equation \ref{eq:p(s_k=1)}), which can drastically speed up the sampling procedure needed to approximate the aforementioned 4 expected values (Eq.\,\ref{eq:gv3}). The batch simulation of the complete system $\Pr(\vs)=\Pr(\vv, \vh)$ involves drawing all visible units given the hidden units, and all hidden units given the visible ones, in a manner of back and forth:
+where $b_i, (i=1, \dots, P)$ is the bias of the $i$ th visible units $v_i$, which shows the amont of energy would be taken away when $v_i$ is ``on'' (or extra energy required to have a fair chance turning it off), that is, larger $b_i$ means lower total energy when $v_i$ is ``on'' and states with $v_i=1$ are thus more stable (i.e.,\,more likely to be seen); the bias $c_j, (j=1, \dots, Q)$ on the $j$ th hidden unit $h_j$ is seen quite the same way, larger $c_j$ makes states having $h_j$ turned ``on'' harder to turn away from; $w_{ij}$ shows connection between the $i$ th visible and $j$ th hidden units, a large value either encourages (when positive) or prohibits (when negative) co-activation of $v_i$ and $h_j$, conversely, a small $w_{ij}$ diminish mutual dependency of the two. We can see the terms involving visible and hidden units are separable for a RBM, due to the absence of hidden-hidden and visible-visible link. \\
+Exploiting the restriction, instead of one unit at a time, a RBM can evolve itself by double batches, that is, simultaneously advancing all hidden units given the current state of visible units, and vise versa, in a manner of back and forth shown below:
 \begin{align*}
   \Pr(v_i=1|\vh) & = \sigma(b_i + \sum_{j=1}^Q{w_{ij} h_j}), \quad i = 1, \dots, P; \numberthis \label{eq:rbm:p(v|h)} \\
   \Pr(h_j=1|\vv) & = \sigma(c_j + \sum_{i=1}^P{v_i w_{ij}}), \quad j = 1, \dots, Q. \numberthis \label{eq:rbm:p(h|v)}
 \end{align*}
-The speed gain over a BM of the same number of units is readily seen from equation (Eq.\,\ref{eq:rbm:p(h|v)}), such that the sampling of hidden units during the positive phase can start right after clumping the $P$ visible units with empirical observation $\vv$, besides instantly reaching thermal equilibrium without any burn in, the positive phase only have to use the same equation to conduct sampling. Also for the negative phase, by allowing all visible units $v_i (i=1, \dots, P)$ to be sampled simultaneously (Eq.\,\ref{eq:rbm:p(v|h)}) and all hidden units vise versa (Eq.\,\ref{eq:rbm:p(h|v)}), the time needed to reach thermal equilibrium, as well as the sampling thereafter, are substantially shortened. \\
-\textbf{Proof of (\ref{eq:rbm:p(v|h)}) and (\ref{eq:rbm:p(h|v)})}: \\
+\textbf{Proof}: \\
 \newcommand{\jt}{\tilde{j}}
 \newcommand{\wt}{\tilde{w}}
 \newcommand{\bt}{\tilde{b}}
 \newcommand{\ct}{\tilde{c}}
-Consider the RBM a special case of the BM comprised of the same number of visible and hidden units while fixing all the connections $w_{ij}$ to zero if $s_i$ and $s_j$ are both visible or both hidden. Without loss of generality, let the $i$ th visible unit $v_i$ also be the $i$ th unit $s_i$ of the complete system $\vs=(\vv, \vh)$, where $i=1, \dots, P$; let the $\jt$ th hidden units $h_{\jt}$ be the $P+\jt$ th unit $s_{P+\jt}$ of the complete system, where $\jt=1, \dots, Q$; lastly, let $\wt_{i\jt}$ = $w_{i,P+\jt}$, $\bt_i = b_i$, and $\ct_{\jt} = b_{P+\jt}$, where $\wt$, $\bt$ and $\ct$ denotes connections and biases of the RBM while $w$ and $b$ denote the connection and bias in the corresponding BM.
+A RBM is a special case of the BM with identical assemble of visible and hidden units except that any connection $w_{ij}$ is forced to zero whenever $s_i$ and $s_j$ are both visible or both hidden. Without loss of generality, let the $i$ th visible unit $v_i$ in the RBM also be the $i$ th unit $s_i$ of the parental BM: $\vs=(\vv, \vh)$, where $i=1, \dots, P$; let the $\jt$ th hidden unit $h_{\jt}$ in the RBM be the $P+\jt$ th unit $s_{P+\jt}$ of the parental BM, where $\jt=1, \dots, Q$; lastly, let $\wt_{i\jt}$ = $w_{i,P+\jt}$, $\bt_i = b_i$, and $\ct_{\jt} = b_{P+\jt}$, where $\wt$, $\bt$ and $\ct$ denotes connections and biases of the RBM while $w$ and $b$ denote the connection and bias in the parental BM.
 \begin{align*}
   \Pr(s_i=1|s_{i-}) & = \Pr(v_i=1|v_{i-}, \vh)                                  & \Leftarrow (\textrm{relabeling}) \\
                     & = \Pr(v_i=1|\vh)                                          & \Leftarrow v_i \perp \vv_{i-}    \\
   \Pr(s_i=1|s_{i-}) & = \sigma(b_i + \sum_{j=1, j \ne i}^{P+Q}{w_{ij}s_j} )     & \Leftarrow (\ref{eq:p(s_k=1)})   \\
                     & = \sigma(b_i + \sum_{j=1, j \ne i}^P{w_{ij}s_j}
-                      + \sum_{\jt=1}^{Q}{w_{i,P+\jt}s_{P+\jt}}) \\
+                      + \sum_{\jt=1}^{Q}{w_{i,P+\jt}s_{P+\jt}})                                                    \\
                     & = \sigma(\bt_i + \sum_{j=1, j \ne i}^P{w_{ij}v_j}
                       + \sum_{\jt=1}^{Q}{\wt_{i\jt}h_{\jt}})                    & \Leftarrow (\textrm{relabeling}) \\
                     & = \sigma(\bt_i + \sum_{j=1, j \ne i}^P{0 v_j}
-                      + \sum_{\jt=1}^{Q}{\wt_{i\jt}h_{\jt}})                    & \Leftarrow v_i \perp \vv_{i-} \\
-                    & = \sigma(\bt_i + \sum_{\jt=1}^Q{\wt_{i\jt}h_{\jt}}) \\
+                      + \sum_{\jt=1}^{Q}{\wt_{i\jt}h_{\jt}})                    & \Leftarrow v_i \perp \vv_{i-}    \\
+                    & = \sigma(\bt_i + \sum_{\jt=1}^Q{\wt_{i\jt}h_{\jt}})                                          \\
   \Rightarrow \Pr(v_i=1|\vh) & = \sigma(\bt_i + \sum_{\jt=1}^Q{\wt_{i\jt}h_{\jt}})
 \end{align*}
-We are done with (\ref{eq:rbm:p(v|h)}), similar argument and the same relabeling can be applied for (\ref{eq:rbm:p(h|v)}). Again, through relabeling units' indices and forcing $w_{ij} \equiv 0$ whenever $s_i$ and $s_j$ are both visible or hidden, the primative update rules for the RBM, that is, the negative gradient of marginal log likelihood of $\vv$ w.r.t. the RBM parameters $\pEC=\{\vb, \vc, \mw\}$, can be seen as a degeneration from the rules (Eq.\,\ref{eq:gv3}) for a BM with the same number of visible and hidden units:
+We are done with (\ref{eq:rbm:p(v|h)}), similar argument can be applied to obtain (\ref{eq:rbm:p(h|v)}).
+\begin{framedbox}[h]
+  \centering
+  \caption{Vecterize RBM thermal dynamics}\label{box:vrbm}
+  \begin{minipage}{1.0\linewidth}
+    Unlike the futile case of BM (Box \ref{box:vgbm}), it is worthy of rewriting the thermal dynamic rules of a RBM in vector and matrix forms to facilitate software implementation, since all visible and
+    hidden units can advanced in two separate parallel procedures.
+    \begin{align*}
+      \begin{bmatrix}
+        \Pr(v_1=1|\vh) \\
+        \Pr(v_2=1|\vh) \\
+        \vdots \\
+        \Pr(v_i=1|\vh) \\
+        \vdots \\
+        \Pr(v_P=1|\vh)
+      \end{bmatrix} = \sigma(\vb + \mw  \vh) \textrm{, and }
+      \begin{bmatrix}
+        \Pr(h_1=1|\vv) \\
+        \Pr(h_2=1|\vv) \\
+        \vdots \\
+        \Pr(h_j=1|\vv) \\
+        \vdots \\
+        \Pr(h_Q=1|\vv)
+      \end{bmatrix} = \sigma(\vc + \mw^T\vv),
+    \end{align*}
+    where the $P$ dimensional $\vv$ and $Q$ dimensional vector $\vh$ represent states of visible and hidden units, respectively; $\vb$ and $\vc$ are their corresponding bias vectors; $\mw$ is a $P \times Q$
+    matrix showing connections between visible and hidden units.
+  \end{minipage}
+\end{framedbox}
+\subsection{MLE for RBM}
+Much like the BM, the goal is to maximum the odds of presenting data on the $P$ visible units that is close or even identical to the emprically observed sample, translated into minimizing the negative marginal probability of visible sample $\vv$ in the log scale. Since RBM is a special case of BM, it simply inherits the primative update rule of the parental BM that relies on gibbs sampling to approximate the integral over the Bolztmann distribution of all units during the negative phase, and another one over its conditional form by clumping the observed sample on the visible units during the positive phase (Eq.\,\ref{eq:gv3}). All we have to do is to relabel the machine paramters, as separated biases for two sets of units, and account for the connection graph degenerated from full connected $(P+Q) \times (P+Q)$ edges into restricted $P \times Q$:
 \begin{align*}
   -\PDV{\log{\Pr(\vv)}}{w_{ij}} & = \mean{v_i h_j}{\vh|\vv} - \mean{v_i h_j}{\vvt, \vht}; \\
   -\PDV{\log{\Pr(\vv)}}{b_i} & = \mean{v_i}{\vh|\vv} - \mean{v_i}{\vvt, \vht} = \mean{v_i}{\vv} - \mean{v_i}{\vvt, \vht}; \\
   -\PDV{\log{\Pr(\vv)}}{c_j} & = \mean{h_j}{\vh|\vv} - \mean{h_j}{\vvt, \vht}; \\
   \textrm{where } i & = 1, \dots, P;\, j = 1, \dots, Q.
 \end{align*}
+Thanks to the restriction of hidden-hidden connection though, a speed gain over its parental BM is readily seen from Eq.\,\eqref{eq:rbm:p(h|v)}, such that sampling of hidden units during the positive phase can start right after fixing the visible units with empirical observation - hidden units instantly reaches thermal equilibrium without any burn in, the positive phase soly relies on the same equation to conduct sampling.
+Again, by considering RBM as a special case of BM, such that $w_{ij} \equiv 0$ whenever $s_i$ and $s_j$ are both visible or hidden, the primative update rules for the RBM, that is, the negative gradient of marginal log likelihood of $\vv$ w.r.t. the RBM parameters $\pEC=\{\vb, \vc, \mw\}$, can be seen as a degeneration from the rules (Eq.\,\ref{eq:gv3}) for a BM with the same number of visible and hidden units:
+
+However, exploitating the visible - visible and hidden - hidden independence (figure \ref{fig:rbm}), the thermal dynamics of a RBM can be simulated by batches instead of one dimension at a time (equation \ref{eq:p(s_k=1)}), which can drastically speed up the sampling procedure needed to approximate the aforementioned 4 expected values (Eq.\,\ref{eq:gv3}). The batch simulation of the complete system $\Pr(\vs)=\Pr(\vv, \vh)$ involves drawing all visible units given the hidden units, and all hidden units given the visible ones, in a manner of back and forth:
+
 Seeing RBM as a special case of BM, we can simplify the one sample training algorithm for BM into a faster algorithm for RBM:
 \begin{algorithm}[h]
   \caption{One sample update rule for Restricted Boltzmann Machine}\label{alg:rbm1}
@@ -360,27 +446,35 @@ Seeing RBM as a special case of BM, we can simplify the one sample training algo
     \State \Return $-\Delta \mw$, $-\Delta \vb$, and $-\Delta \vc$
   \end{algorithmic}
 \end{algorithm} \\
-Despite the positive phase omitting the burn in period, and the time to advance a system state being shortened in general compared to BMs of the same scale, the positive phase still relies limited sampling to approximate an expected value over all assembles of hidden units, which, in case of a RBM, can be simplifed into a close form.
+Despite the positive phase omitting the burn in period, and the time to advance a system state being shortened in general compared to BMs of the same scale, the positive phase still relies limited sampling to approximate an expected value over all assembles of hidden units, which, in case of a RBM, can be simplifed into a close form. \\
+
+
 %
 \subsection{RBM simplified}
-This can be done for a RBM due to the separation of visible and hidden unit states in its energy formular (Eq.\,\ref{eq:rbm:e(s)}), and the binary nature of all units. Review the gradient of negative log likelihood for empirical data posted on its visible units (Eq.\,\ref{eq:gv1}) and the energy function of a RBM (Eq.\,\ref{eq:rbm:e(s)}), the objective function to be minimized with respect to machine parameters $\pEC$ has a simplified form:
-\begin{align}\label{eq:rbm:l(v)}
-  -\log{\Pr(\vv)} = -e^{\vv^T\vb} - \sum_{j=1}^Q{\log{(e^{c_j + \vv^T\vw_j}+1)}} + \mean{e^{\vvt^T\vb} + \sum_{j=1}^Q{\log{(e^{c_j + \vvt^T\vw_j}+1)}}}{\vvt}
-\end{align}
+The update rules for a RBM can be simplified by replacing the approximated integral over $Q$ hidden units $\vh$ with explicit sum over all valid assemble of $\vh$ for both positive and negative phase, which is made possible by the hidden-hidden independence, reflected by the separation of visible and hidden unit states in its energy formular (Eq.\,\ref{eq:rbm:e(s)}), and the binary nature of all units. The same cannot be done for a BM even if summation over all $P+Q$ binary units is not drastically more expensive than $Q$ hidden units, because batch update does not apply to BM due to its full connection, therefore it is pointless to sum over all hiddens since the update has to be done on a per-unit bases.
+Back to the RBM case, review the crude one sample update rule for a general BM (Eq.\,\ref{eq:gv1}) and the energy function of a RBM (Eq.\,\ref{eq:rbm:e(s)}), the crude one sample update rule, that is, the gradient of negative log likelihood of observing $\vv$ on the visible units, with respect to machine parameters $\pEC$ has a concise form:
+% \begin{align}\label{eq:rbm:l(v)}
+%   -\log{\Pr(\vv)} & = -e^{\vv^T\vb} - \sum_{j=1}^Q{\log{(e^{c_j + \vv^T\vw_j}+1)}} + \mean{e^{\vvt^T\vb} + \sum_{j=1}^Q{\log{(e^{c_j + \vvt^T\vw_j}+1)}}}{\vvt}
+% \end{align}
+\begin{align*}\label{eq:rbm:gv1}
+  -\PDV{\log{\Pr(\vv)}}{\mw} & = -\vv\sigma(\vc^T + \vv^T\mw)  + \mean{\vvt\sigma(\vc^T + \vvt^T\mw)}{\vvt} \\
+  -\PDV{\log{\Pr(\vv)}}{\vb} & = -\vv + \mean{\vvt}{\vvt}  \numberthis \\
+  -\PDV{\log{\Pr(\vv)}}{\vc} & = -\im_{\vc} \sigma(\vc + \vv^T\mw)
+\end{align*}
 The positive phase can be accurately calculated in roughly $O(NM)$ steps, similar to the load of a single layered feed forward neural network, and much less than $O[(N+M)^2]$ should the same be done with a generic BM.\\
-\textbf{Derivation of Eq.\,{\eqref{eq:rbm:l(v)}}}: \\
+\textbf{Derivation of Eq.\,{\eqref{eq:rbm:gv1}}}: \\
 Plug RBM energy (Eq.\,\ref{eq:rbm:e(s)}) into crude gradient (Eq.\,\ref{eq:gv1}) we have:
 \begin{align*}
   -\PDV{\log{\Pr(\vv)}}{\pEC} = -\PDV{\log{\int_{\vh}{e^{\vv^T\vb + \vc^T\vh + \vv^T\mw\vh}d\vh}}}{\pEC} + \PDV{\mean{\log{\int_{\vh}{e^{\vv^T\vbt + \vc^T\vh + \vvt^T\mw\vh}d\vh}}}{\vvt}}{\pEC},
 \end{align*}
-We only have to deal with positive phase since the negative phase has taken an identical form; from the energy function, factor out terms not involving the hidden units:
+We only have to deal with positive phase since the negative phase has the same form. From the energy function, factor out terms not involving the hidden units:
 \begin{align*}
   -\log{\int_{\vh}{e^{\vv^T\vb + \vc^T\vh + \vv^T\mw\vh}} d\vh} = -e^{\vv^T\vb} - \log{\int_{\vh}{e^{(\vc + \vv^T\mw)\vh}} d\vh};
 \end{align*}
 terms left in the energy function do not involve product bwteeen hidden units (RBM prohibits hidden-hidden connection), therefore the contribution of each hidden unit to the integral is separable; also take advantage of the fact that units in the RBM are binary, thus the integral over the $j$ th. hidden units $h_j$ only involves summation over two condictions: $h_j=0$ and $h_j=1$:
 \begin{align*}
   \int_{\vh}{e^{(\vc + \vv^T\mw)\vh}} d\vh
-  & = \int_{(h_1, \dots, h_Q)} \left[\exp{\sum_{j=1}^Q{(c_j + \vv^T\vw_j)h_j}} \right] d(h_1, \dots, h_Q) \\
+  & = \int_{(h_1, \dots, h_Q)} \left[\exp{\sum_{j=1}^Q{(c_j + \vv^T\vw_j)h_j}} \right] d(h_1, \dots, h_Q)
   & = \int_{h_1}e^{(c_1 + \vv^T\vw_1)h_1}                 \int_{h_2}e^{(c_2 + \vv^T\vw_2)h_2} \int_{h_3} \dots \int_{h_Q}e^{(c_Q + \vv^T\vw_Q)h_Q} dh_Q \dots dh_3\,dh_2\,dh_1 \\
   & = (e^{c_1+\vv^T\vw_1}+e^0)                            \int_{h_2}e^{(c_2 + \vv^T\vw_2)h_2} \int_{h_3} \dots \int_{h_Q}e^{(c_Q + \vv^T\vw_Q)h_Q} dh_Q \dots dh_3\,dh_2 \\
   & = (e^{c_1+\vv^T\vw_1}+e^0)                            (e^{c_2+\vv^T\vw_2} + e^0)          \int_{h_3} \dots \int_{h_Q}e^{(c_Q + \vv^T\vw_Q)h_Q} dh_Q \dots dh_3 \\
@@ -391,7 +485,7 @@ where $\vw_j$ is the $j$ th column in the $P \times Q$ connection (weight) matri
 \begin{align*}
   -\log{\int_{\vh}{e^{-E(\vv, \vh)}} d\vh} = -e^{\vv^T\vb} - \sum_{j=1}^Q{\log{(e^{c_j + \vv^T\vw_j}+1)}}.
 \end{align*}
-It is easy to derive the gradient of positive phase w.r.t. $\pEC=\{\vb, \vc, \mw\}$:
+Now it is easy to derive the gradient of positive phase w.r.t. $\pEC=\{\vb, \vc, \mw\}$:
 \begin{align*}
   -\PDV{\log{\int_{\vh} e^{-E(\vv, \vh)}} d\vh}{\vw_j}
   & = -\frac{\vv^T e^{c_j + \vv^T\vw_j}}{e^{c_j + \vv^T\vw_j}+1} = -\vv\sigma(c_j + \vv^T\vw_j) \\
@@ -400,13 +494,15 @@ It is easy to derive the gradient of positive phase w.r.t. $\pEC=\{\vb, \vc, \mw
   -\PDV{\log{\int_{\vh} e^{-E(\vv, \vh)}} d\vh}{c_j}
   & = -\frac{c_j e^{c_j + \vv^T\vw_j}}{e^{c_j + \vv^T\vw_j}+1} = -c_j\sigma(c_j + \vv^T\vw_j) \\
   \Rightarrow -\PDV{\log{\int_{\vh} e^{-E(\vv, \vh)}} d\vh}{\vc}
-  & = \diag{\vc} \sigma(\vc + \vv^T\mw)
+  & = -\diag{\vc} \sigma(\vc + \vv^T\mw) \\
+  \textrm{and } -\PDV{\log{\int_{\vh} e^{-E(\vv, \vh)}} d\vh}{\vb}
+  & = -\vv
 \end{align*}
 The negative phase can be done in exactly the same way plus the sum rule in differentiation. 
 \subsection{RBM with Symbolic Library}
 The primative update rules are necessary for developing both BM and RBM trainer from scratch, in case of available symbolic mathematics libraries however, such as Python-Theano and Matlab-Symbolic, it is often unnecessary, or even over-developing to implement the primative rules in Eq.\,\eqref{eq:gv3} directly through algorithm \eqref{alg:gbm1} and \eqref{alg:rbm1} . Instead, it would be more efficient and easier to just construct a crude objective function, then let the software packages to figure out the gradient, and subsequently, the update rules. 
 which involves the mean of marginal distribution $\Pr(\vvt)$, posing a severe challenge to direct evaluation attempt, we instead resort to approximation via limited sampling from $\Pr(\vvt)$:
-\begin{align}\label{eq:l(v)2}
+\begin{align}\label{eq:rbm:gv1}
   -\log{\Pr(\vv)} \approx -\log{\int_{\vh} e^{-E(\vv, \vh)} d\vh} + \frac{1}{|M|}\sum_{\vvt \in M}{\log{\int_{\vh} e^{-E(\vvt, \vh)}d\vh}}
 \end{align}
 where $M$ is the set of samples drawn from $\Pr(\vvt)$. \\

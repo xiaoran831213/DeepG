@@ -19,12 +19,14 @@ simu <- function(N=500, P=3, Q=5)
 
     ## system states in data space
     ## s <- rbinom(length(et), 1, 1/(1+exp(-et)))
-    w <- matrix(rnorm(D*D), D, D)
-    w <- .3* (w + t(w))
+    w <- matrix(rnorm(D*D) * rbinom(D*D, 1, .8), D, D)
+    w <- .4 * (w + t(w))
+    w[abs(w) < 1] <- 0
+    
     diag(w) <- 0
     s <- matrix(rbinom(length(N * D), 1, .5), N, D)
     s[, +1] <- 1
-    s <- go(s, w, it=5)
+    s <- go(s, w, brn=5)
     s <- s[, -1]
     
     ## feature names
@@ -58,34 +60,78 @@ init <- function(x, q=3)
     list(s=s, v=2:(p+1), h=(p+2):(p+1+q), w=w)
 }
 
+ce2 <- function(p, y)
+{
+    sum(-2 * (y * log(p) + (1 - y) * log(1 - p)))
+}
+
+
 test <- function(n=100, i=100, P=3, Q=3, ...)
 {
+    ## history
+    hs <- double(i)
+    
+    ## simulate data
     dt <- with(simu(n, P, Q*2), s[, v])
-    LM <- glm(dt[, P] ~ dt[, 1:(P-1)], 'binomial')
-    bm <- init(x=dt, q=max(1, Q/2))
 
-    ## bm <- within(bm, s[, P] <- as.integer(s[, 1] + s[, 2]))
-    s2 <- bm$s
-    s2[, P+1] <- 0
-    p2 <- with(bm, go(s2, w, up=c(P+1, bm$h), it=20))
-    p3 <- prob(p2, bm$w, P+1)
-    e2 <- sum(abs(bm$s[, P+1] - p2[, P+1]))
-    e3 <- sum(bm$s[, P+1] * log(p3) + (1 - bm$s[, P+1]) * log(1-p3))
-    cat(e2, "\t", e3, "\n")
+    ## GLM reference
+    y <- dt[, P]
+    x1 <- dt[, 1:(P-1)]
+    x2 <- dt[, 1:(P-1)]
+    LM <- glm(y ~ x1, 'binomial')
+    
+    ## the Boltzmann Machine
+    BM <- init(x=dt, q=Q)
+
+    ## a damaged data
+    s2 <- BM$s
+    s2[, P+1] <- rbinom(n, 1, .5)
+
+    ## make initial assessment of deviance
+    dv <- with(BM,
+    {
+        ## sampling the response, and hidden units
+        gs <- go(s2, w, idx=c(P+1, h), brn=20)
+
+        ## activation probability of the response
+        pp <- prob(gs, w, P+1)
+
+        ## prob v.s. truth -> deviance
+        ce2(pp, s[, P+1])
+    })
+
+    ## print and return
+    cat(dv, "\n")
+    hs[i] <- dv
+
     while(i > 0)
     {
-        bm <- within(bm, w <- trn(s, w, h, it=50, mf=F, ...))
-        p2 <- with(bm, go(s2, w, up=c(P+1, bm$h), it=20))
-        p3 <- prob(p2, bm$w, P+1)
-        e2 <- sum(abs(bm$s[, P+1] - p2[, P+1]))
-        e3 <- sum(bm$s[, P+1] * log(p3) + (1 - bm$s[, P+1]) * log(1-p3))
-        cat(e2, "\t", e3, "\n")
+        ## train the BM
+        BM <- within(BM, w <- trn(s, w, h, nep=1, brn=20, gsp=5 ,...))
         i <- i - 1
+
+        ## assess model deviance
+        dv <- with(BM,
+        {
+            ## sampling the response, and hidden units
+            gs <- go(s2, w, idx=c(P+1, h), brn=20)
+
+            ## activation probability of the response
+            pp <- prob(gs, w, P+1)
+
+            ## prob v.s. truth -> deviance
+            ce2(pp, s[, P+1])
+        })
+
+        ## print and return
+        cat(dv, "\n")
+        hs[i] <- dv
     }
 
     ## GLM of visible units
     print(summary(LM))
-    invisible(bm)
+    BM$hs <- rev(hs)
+    invisible(BM)
 }
 
 ## system energy from states and connections
@@ -104,51 +150,57 @@ prob <- function(s, w, mk=NULL)
 }
 
 ## advance the system states
-go <- function(s, w, up=NULL, it=1, mf=F)
+go <- function(s, w, idx=NULL, brn=20, gsp=1, drop=TRUE)
 {
     ## fixed units
-    if(is.null(up))
-        up <- 2:ncol(s)
+    if(is.null(idx))
+        idx <- 2:ncol(s)
     N <- nrow(s)
 
-    while(it > 0)
+    ## burn in
+    for(i in 1:brn)
     {
-        if(mf)                      # 2.1 naive mean field
-        {
-            for(k in up)
-            {
-                s[, k] <- prob(s, w, k)
-            }
-        }
-        else                        # 2.2 sampling instead.
-        {
-            for(k in up)
-            {
-                s[, k] <- rbinom(N, 1, prob(s, w, k))
-            }
-        }
-        it <- it - 1
+        for(k in idx)
+            s[, k] <- rbinom(N, 1, prob(s, w, k))
     }
-    s
+
+    ## sampling
+    r <- array(.0, c(dim(s), gsp))
+    for(i in 1:gsp)
+    {
+        for(k in idx)
+            s[, k] <- rbinom(N, 1, prob(s, w, k))
+        r[, , i] <- s
+    }
+
+    ## return
+    if(drop)
+        r <- drop(r)
+    r
 }
 
 
-trn <- function(s, w, h, i=1, lrt=1e-3, ...)
+trn <- function(s, w, h, nep=1, lrt=1e-3, ...)
 {
-    while(i > 0)
+    d <- 2:ncol(s)
+    for(i in 1:nep)
     {
         ## positive phase
-        pp <- crossprod(go(s, w, up=h, ...))
+        pp <- go(s, w, idx=h, drop=F, ...)
+        pp <- apply(pp, 3, crossprod)        #dim: length(w) X gbs
+        pp <- rowMeans(pp)
 
         ## negative phase
-        np <- crossprod(go(s, w, ...))
+        np <- go(s, w, idx=d, drop=F, ...)
+        np <- apply(np, 3, crossprod)
+        np <- rowMeans(np)
         
         ## update rule
         up <- pp - np
+        dim(up) <- dim(w)
         diag(up) <- 0
 
         w <- w + lrt * up
-        i <- i - 1
     }
     w
 }

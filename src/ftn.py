@@ -146,8 +146,9 @@ def main(fnm, **kwd):
     eph = kwd.pop('eph', 0) + ftn.ep.get_value()
     hof = ftn.nwk.ec(xmx).eval()
     rsd = xmx - ftn.nwk(xmx).eval()  # the residual
+
     if ftn.hlt:
-        print('NT: Halt.')
+        print('NT: Halt.', ftn.hlt)
 
     # 3) update progress and save.
     kwd.update(nwk=nwk, wdp=wdp, lrt=lrt,

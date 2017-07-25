@@ -135,6 +135,7 @@ def gemma(fnm, y, idx=None, jdx=None, div=.80):
     return ret
 
 
+# ---------- benchmark references ---------- #
 def kreg(xT, yT, xV=None, yV=None):
     """ Kernel Regression. """
     from sklearn.kernel_ridge import KernelRidge as KR
@@ -154,6 +155,42 @@ def kreg(xT, yT, xV=None, yV=None):
         ret[k] = cR
     return ret
 
+
+def svreg(xT, yT, xV=None, yV=None):
+    """ Support Vector Regression. """
+    from sklearn import svm
+
+    # fitting
+    kms = ['linear', 'poly', 'rbf', 'sigmoid']
+    ret = dict()
+    for k in kms:
+        clf = svm.SVR(kernel=k)
+        clf.fit(xT, yT)
+
+        # testing
+        yH = clf.predict(xV)
+        cR = np.corrcoef(yV.flatten(), yH.flatten())[0, 1]
+        ret[k] = cR
+    return ret
+
+
+def dtreg(xT, yT, xV=None, yV=None):
+    """ Decision Tree Regression. """
+    from sklearn.tree import DecisionTreeRegressor as DTR
+    
+    dpt = list(range(1, 10)) + [None]
+    ret = dict()
+    for d in dpt:
+        # fitting
+        dtr = DTR(max_depth=d)
+        dtr.fit(xT, yT)
+
+        # testing
+        yH = dtr.predict(xV)
+        cR = np.corrcoef(yV.flatten(), yH.flatten())[0, 1]
+        ret[d] = cR
+    return ret
+    
 
 # r=main('../1kg/rnd/0004', sav='../tmp', N=500, P=1000, nep=200, xtp='pcs')
 def main(fnm='../1kg/rnd/0001', **kwd):
@@ -224,15 +261,12 @@ def main(fnm='../1kg/rnd/0001', **kwd):
     else:
         gmx = gmx[kwd['idx'], :, :][:, :, kwd['jdx']]
 
-    # call gamma
-    # gma = gemma(fnm, phe, kwd['idx'], kwd['jdx'])
-
     # flatten the genotype?
     gtp = kwd.get('gtp', 0)
     if gtp == 1:                # flat format
         gmx = gmx.reshape(gmx.shape[0], -1).astype('f')
     else:                       # dosage format
-        gmx = gmx.sum(1)
+        gmx = gmx.sum(1).astype('f')
 
     # perform PCA on genome data if necessary
     pcs = kwd.pop('pcs', None)
@@ -256,8 +290,18 @@ def main(fnm='../1kg/rnd/0001', **kwd):
         xmx = zscore(xmx, 0)
     N = xmx.shape[0]
     xmx = xmx[:, xmx.std(0) > 0]
-    dim = min(*xmx.shape)
-    dim = [xmx.shape[1]] + [dim//2, dim//4, 1]
+
+    # deep network?
+    if kwd.get('dpn', 0):
+        dim = xmx.shape[1]
+        dim = [dim]*2 + [dim//2]*2 + [dim//4]*4 + [dim//8, dim//16, 1]
+        sqf = 'relu'
+        lrt = kwd.pop('lrt', 1e-6)
+    else:
+        dim = min(*xmx.shape)
+        dim = [xmx.shape[1]] + [dim//2, dim//4, 1]
+        sqf = 'sigmoid'
+        lrt = kwd.pop('lrt', 1e-4)
 
     div = int(kwd.get('div', 0.80) * N)
     if div < N:
@@ -267,16 +311,23 @@ def main(fnm='../1kg/rnd/0001', **kwd):
         xT, xV = xmx, None
         yT, yV = phe, None
 
+    # ---------- benchmark references ---------- #
     # kernel_ridge regression
     krg = kreg(xT, yT, xV, yV)
 
-    # learing rates
-    lrt = kwd.pop('lrt', 1e-4)
+    # SV regression
+    svr = svreg(xT, yT, xV, yV)
+
+    # Decision Tree Regression
+    dtr = dtreg(xT, yT, xV, yV)
+
+    # call gamma
+    # gma = gemma(fnm, phe, kwd['idx'], kwd['jdx'])
 
     # train the network, create it if necessary
     nwk = kwd.pop('nwk', None)
     if nwk is None:
-        nwk = MLP.from_dim(dim, **kwd)
+        nwk = MLP.from_dim(dim, s=sqf, **kwd)
         nwk[-1].s = 1
         print('create NT: ', nwk)
 
@@ -301,7 +352,10 @@ def main(fnm='../1kg/rnd/0001', **kwd):
         print('NT: Halt,', ftn.hlt)
 
     # 3) update progress and save.
-    kwd.update(nwk=nwk, lrt=lrt, phe=phe, yht=yht, hst=hst, krg=krg, hlt=ftn.hlt)
+    kwd.update(
+        nwk=nwk, lrt=lrt,
+        phe=phe, yht=yht, hst=hst, hlt=ftn.hlt,
+        krg=krg, svr=svr, dtr=dtr)
 
     if sav:
         print("write to: ", sav)
@@ -342,17 +396,49 @@ def report(sim):
     # performance measures
     from matplotlib import pyplot as gc  # graphics context
 
-    x = sim[0]['hst']['ep']             # shared x axis
-    r2 = sim[0]['rsq']                  # shared r2
-    gv = dict()
+    x = sim[0]['hst']['ep']     # shared x axis
+    r2 = sim[0]['rsq']          # shared r2
+    N = sim[0]['idx'].size      # shared sample size
+    M = sim[0]['jdx'].size      # shared feature size
+    frq = sim[0]['frq']
+    nep = sim[0]['nep']
+
+    # shared genome type
+    gtp = 'flat' if sim[0]['gtp'] != 0 else 'dosage'
+    mdl = sim[0]['mdl']
+    ttl = dict(r2=r2, N=N, M=M, gtp=gtp, frq=frq, nep=nep, mdl=mdl)
+    ttl = ', '.join(['='.join([str(k), str(v)]) for k, v in ttl.items()])
+    print(ttl)
+
+    krg = dict()                # kernel regressions
     for k in sim[0]['krg'].keys():
-        gv[k] = np.array([_['krg'][k] for _ in sim]).mean()
+        krg[k] = np.array([_['krg'][k] for _ in sim]).mean()
+
+    svr = dict()                # Support Vector Regression
+    for k in sim[0]['svr'].keys():
+        svr[k] = np.array([_['svr'][k] for _ in sim]).mean()
+
+    dtr = dict()                # Decision Tree Regression
+    for i in sim[0]['dtr'].keys():
+        dtr[i] = np.array([_['dtr'][i] for _ in sim]).mean()
+
+    def fmt(dc):
+        r = '\n'.join(
+            ["{:12s}:{:.3f}".format(str(k), v) for k, v in dc.items()])
+        return r
+
+    print('KNR:\n' + fmt(krg) + '\n')
+    print('SVR:\n' + fmt(svr) + '\n')
+    print('DTR:\n' + fmt(dtr) + '\n')
 
     # course types
+    print('DNN:',)
     types = set(_['xtp'] for _ in sim)
     cs = 'bgrcmykw'
     for i, t in enumerate(types):
-        h = np.array([s['hst'] for s in sim if s['xtp'] == t])
+        h = [s for s in sim if s['xtp'] == t]
+        nwk = str(h[0]['nwk'])
+        h = np.array([_['hst'] for _ in h])
 
         # early stop
         early = np.argmin(h['verr'].mean(0))
@@ -365,18 +451,18 @@ def report(sim):
 
         if i == 0:
             gc.ylabel(r'error')
+            gc.title(ttl)
         gc.legend()
 
         # correlation plot
         gc.subplot(2, 1, 2)
         gc.loglog(x, h['vcor'].mean(0), c=cs[i], lw=2, label=t)
         gc.loglog([early, early], gc.ylim(), c=cs[i], ls='-', lw=2)
-        print(gv)
-        print(h['vcor'].mean(0).max(), h['vcor'].max(1).mean())
+        print("{:s} {:.3f} {:.3f} {:s}".format(
+            t, h['vcor'].mean(0).max(), h['vcor'].max(1).mean(), nwk))
 
         if i == 0:
             gc.loglog(x, np.repeat(r2, x.size), 'r', lw=2, label=r'$r^2$')
-            # gc.loglog(x, np.repeat(gv, x.size), 'k', lw=2, label=str(gv)[:3])
             gc.ylabel(r'$corr(y, \hat{y})$')
             gc.xlabel(r'epoch')
         gc.legend(loc=4)

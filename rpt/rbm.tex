@@ -400,19 +400,14 @@ We are done with (\ref{eq:rbm:p(v|h)}), similar argument can be applied to obtai
   \end{minipage}
 \end{framedbox}
 \subsection{MLE for RBM}
-Much like the BM, the goal is to maximum the odds of presenting data on the $P$ visible units that is close or even identical to the emprically observed sample, translated into minimizing the negative marginal probability of visible sample $\vv$ in the log scale. Since RBM is a special case of BM, it simply inherits the primative update rule of the parental BM that relies on gibbs sampling to approximate the integral over the Bolztmann distribution of all units during the negative phase, and another one over its conditional form by clumping the observed sample on the visible units during the positive phase (Eq.\,\ref{eq:gv3}). All we have to do is to relabel the machine paramters, as separated biases for two sets of units, and account for the connection graph degenerated from full connected $(P+Q) \times (P+Q)$ edges into restricted $P \times Q$:
+Much like the BM, the goal is to maximum the odds of presenting data on $P$ visible units that is close or even identical to the emprically observed sample, translated into minimizing the negative marginal probability of visible sample $\vv$ in the log scale. Since RBM is a special case of BM, it simply inherits the primative update rule of the parental BM that relies on gibbs sampling to approximate the integral over the Bolztmann distribution of all units during the negative phase, and another one over its conditional form by clumping the observed sample on the visible units during the positive phase (Eq.\,\ref{eq:gv3}). All we have to do is to relabel the machine paramters, as separated biases for two sets of units, and account for the connection graph degenerated from full connected $(P+Q) \times (P+Q)$ edges into restricted $P \times Q$:
 \begin{align*}
   -\PDV{\log{\Pr(\vv)}}{w_{ij}} & = \mean{v_i h_j}{\vh|\vv} - \mean{v_i h_j}{\vvt, \vht}; \\
   -\PDV{\log{\Pr(\vv)}}{b_i} & = \mean{v_i}{\vh|\vv} - \mean{v_i}{\vvt, \vht} = \mean{v_i}{\vv} - \mean{v_i}{\vvt, \vht}; \\
   -\PDV{\log{\Pr(\vv)}}{c_j} & = \mean{h_j}{\vh|\vv} - \mean{h_j}{\vvt, \vht}; \\
   \textrm{where } i & = 1, \dots, P;\, j = 1, \dots, Q.
 \end{align*}
-Thanks to the restriction of hidden-hidden connection though, a speed gain over its parental BM is readily seen from Eq.\,\eqref{eq:rbm:p(h|v)}, such that sampling of hidden units during the positive phase can start right after fixing the visible units with empirical observation - hidden units instantly reaches thermal equilibrium without any burn in, the positive phase soly relies on the same equation to conduct sampling.
-Again, by considering RBM as a special case of BM, such that $w_{ij} \equiv 0$ whenever $s_i$ and $s_j$ are both visible or hidden, the primative update rules for the RBM, that is, the negative gradient of marginal log likelihood of $\vv$ w.r.t. the RBM parameters $\pEC=\{\vb, \vc, \mw\}$, can be seen as a degeneration from the rules (Eq.\,\ref{eq:gv3}) for a BM with the same number of visible and hidden units:
-
-However, exploitating the visible - visible and hidden - hidden independence (figure \ref{fig:rbm}), the thermal dynamics of a RBM can be simulated by batches instead of one dimension at a time (equation \ref{eq:p(s_k=1)}), which can drastically speed up the sampling procedure needed to approximate the aforementioned 4 expected values (Eq.\,\ref{eq:gv3}). The batch simulation of the complete system $\Pr(\vs)=\Pr(\vv, \vh)$ involves drawing all visible units given the hidden units, and all hidden units given the visible ones, in a manner of back and forth:
-
-Seeing RBM as a special case of BM, we can simplify the one sample training algorithm for BM into a faster algorithm for RBM:
+Thanks to the restriction of hidden-hidden connection though, a major speed gain over its parental BM is immediately seen from Eq.\,\eqref{eq:rbm:p(h|v)}, that sampling of hidden units during the positive phase can start right after clumping the visible units with empirical observation because hidden units instantly reaches thermal equilibrium without any burn in; another speed up come from the batch rules reducing the time to advance the entire system from $O((P+Q)^2)$ to $O(PQ)$, which could be substantial if $P$ and $Q$ differ by large; an minor speed up can be achieved via vectorizing the sampling rules so morden softwares and hardwares can be fully engaged. Now, the one sample training algorithm for RBM can be programmed by first inheriting the algorithm for BM (Alg.\,\ref{alg:gbm1}), then improve it taking advantages of the aforementioned three speeding factors.
 \begin{algorithm}[h]
   \caption{One sample update rule for Restricted Boltzmann Machine}\label{alg:rbm1}
   \begin{algorithmic}[1]
@@ -446,24 +441,34 @@ Seeing RBM as a special case of BM, we can simplify the one sample training algo
     \State \Return $-\Delta \mw$, $-\Delta \vb$, and $-\Delta \vc$
   \end{algorithmic}
 \end{algorithm} \\
-Despite the positive phase omitting the burn in period, and the time to advance a system state being shortened in general compared to BMs of the same scale, the positive phase still relies limited sampling to approximate an expected value over all assembles of hidden units, which, in case of a RBM, can be simplifed into a close form. \\
-
-
+Despite the positive phase skipping the burn in, and the time to advance the being shortened in general, the update rules (negative gradients) still rely on limited sampling to approximate integrals required to calculate expected values, which has made the negative gradient noisy - there are still rooms for improvement.
 %
-\subsection{RBM simplified}
-The update rules for a RBM can be simplified by replacing the approximated integral over $Q$ hidden units $\vh$ with explicit sum over all valid assemble of $\vh$ for both positive and negative phase, which is made possible by the hidden-hidden independence, reflected by the separation of visible and hidden unit states in its energy formular (Eq.\,\ref{eq:rbm:e(s)}), and the binary nature of all units. The same cannot be done for a BM even if summation over all $P+Q$ binary units is not drastically more expensive than $Q$ hidden units, because batch update does not apply to BM due to its full connection, therefore it is pointless to sum over all hiddens since the update has to be done on a per-unit bases.
+\subsection{Exact integral over hidden units}
+The update rules for RBM MLE can be improved by replacing the approximated integral over $Q$ hidden units $\vh$ with explicit sum over all valid assemble of $\vh$ for both positive and negative phase, which is made possible by the hidden-hidden independence, reflected by separable visible and hidden states in the RBM energy formular (Eq.\,\ref{eq:rbm:e(s)}). The same cannot be done for a BM even if the summation over all $P+Q$ binary units is not drastically more expensive than $Q$ hidden units, because batch update does not apply to BM due to its full connection - it is pointless to sum over hidden units assemble since the states has to progress on a per-unit bases.
 Back to the RBM case, review the crude one sample update rule for a general BM (Eq.\,\ref{eq:gv1}) and the energy function of a RBM (Eq.\,\ref{eq:rbm:e(s)}), the crude one sample update rule, that is, the gradient of negative log likelihood of observing $\vv$ on the visible units, with respect to machine parameters $\pEC$ has a concise form:
 % \begin{align}\label{eq:rbm:l(v)}
 %   -\log{\Pr(\vv)} & = -e^{\vv^T\vb} - \sum_{j=1}^Q{\log{(e^{c_j + \vv^T\vw_j}+1)}} + \mean{e^{\vvt^T\vb} + \sum_{j=1}^Q{\log{(e^{c_j + \vvt^T\vw_j}+1)}}}{\vvt}
 % \end{align}
-\begin{align*}\label{eq:rbm:gv1}
-  -\PDV{\log{\Pr(\vv)}}{\mw} & = -\vv\sigma(\vc^T + \vv^T\mw)  + \mean{\vvt\sigma(\vc^T + \vvt^T\mw)}{\vvt} \\
-  -\PDV{\log{\Pr(\vv)}}{\vb} & = -\vv + \mean{\vvt}{\vvt}  \numberthis \\
-  -\PDV{\log{\Pr(\vv)}}{\vc} & = -\im_{\vc} \sigma(\vc + \vv^T\mw)
-\end{align*}
-The positive phase can be accurately calculated in roughly $O(NM)$ steps, similar to the load of a single layered feed forward neural network, and much less than $O[(N+M)^2]$ should the same be done with a generic BM.\\
-\textbf{Derivation of Eq.\,{\eqref{eq:rbm:gv1}}}: \\
-Plug RBM energy (Eq.\,\ref{eq:rbm:e(s)}) into crude gradient (Eq.\,\ref{eq:gv1}) we have:
+\begin{equation} \label{eq:rbm:gv1}
+  -\begin{bmatrix}
+    \PDV{\log{\Pr(\vv)}}{\mw} \\
+    \PDV{\log{\Pr(\vv)}}{\vb} \\
+    \PDV{\log{\Pr(\vv)}}{\vc}
+  \end{bmatrix} = 
+  \begin{bmatrix}
+    -\vv\sigma(\vc^T + \vv^T\mw)      \\
+    -\vv                              \\
+    -\bs{I}_{\vc} \sigma(\vc + \vv^T\mw)
+  \end{bmatrix} +
+  \mean{\begin{bmatrix}
+    \vvt\sigma(\vc^T + \vvt^T\mw)     \\
+    \vvt                              \\
+    \bs{I}_{\vc} \sigma(\vc + \vvt^T\mw)
+  \end{bmatrix}}{\vvt}
+\end{equation}
+The positive phase can be accurately calculated in roughly $O(NM)$ steps, similar to the load of a single layered feed forward neural network. \\
+\textbf{Derivation}: \\
+Replace the place holder in the crude negative gradient (Eq.\,\ref{eq:gv1}) with RBM energy formula (Eq.\,\ref{eq:rbm:e(s)}):
 \begin{align*}
   -\PDV{\log{\Pr(\vv)}}{\pEC} = -\PDV{\log{\int_{\vh}{e^{\vv^T\vb + \vc^T\vh + \vv^T\mw\vh}d\vh}}}{\pEC} + \PDV{\mean{\log{\int_{\vh}{e^{\vv^T\vbt + \vc^T\vh + \vvt^T\mw\vh}d\vh}}}{\vvt}}{\pEC},
 \end{align*}
@@ -471,10 +476,10 @@ We only have to deal with positive phase since the negative phase has the same f
 \begin{align*}
   -\log{\int_{\vh}{e^{\vv^T\vb + \vc^T\vh + \vv^T\mw\vh}} d\vh} = -e^{\vv^T\vb} - \log{\int_{\vh}{e^{(\vc + \vv^T\mw)\vh}} d\vh};
 \end{align*}
-terms left in the energy function do not involve product bwteeen hidden units (RBM prohibits hidden-hidden connection), therefore the contribution of each hidden unit to the integral is separable; also take advantage of the fact that units in the RBM are binary, thus the integral over the $j$ th. hidden units $h_j$ only involves summation over two condictions: $h_j=0$ and $h_j=1$:
+terms left in the energy function do not involve product bwteeen hidden units (hence separable), therefore the contribution of a hidden unit to the integral is unaffected by other hidden units; also take advantage of the fact that units are binary, thus the integral over the $j$ th. hidden units $h_j$ only involves summation over two condictions: $h_j=0$ and $h_j=1$:
 \begin{align*}
-  \int_{\vh}{e^{(\vc + \vv^T\mw)\vh}} d\vh
-  & = \int_{(h_1, \dots, h_Q)} \left[\exp{\sum_{j=1}^Q{(c_j + \vv^T\vw_j)h_j}} \right] d(h_1, \dots, h_Q)
+  & \quad \int_{\vh}{e^{(\vc + \vv^T\mw)\vh}} d\vh \\
+  & = \int_{(h_1, \dots, h_Q)} \left[\exp{\sum_{j=1}^Q{(c_j + \vv^T\vw_j)h_j}} \right] d(h_1, \dots, h_Q) \\
   & = \int_{h_1}e^{(c_1 + \vv^T\vw_1)h_1}                 \int_{h_2}e^{(c_2 + \vv^T\vw_2)h_2} \int_{h_3} \dots \int_{h_Q}e^{(c_Q + \vv^T\vw_Q)h_Q} dh_Q \dots dh_3\,dh_2\,dh_1 \\
   & = (e^{c_1+\vv^T\vw_1}+e^0)                            \int_{h_2}e^{(c_2 + \vv^T\vw_2)h_2} \int_{h_3} \dots \int_{h_Q}e^{(c_Q + \vv^T\vw_Q)h_Q} dh_Q \dots dh_3\,dh_2 \\
   & = (e^{c_1+\vv^T\vw_1}+e^0)                            (e^{c_2+\vv^T\vw_2} + e^0)          \int_{h_3} \dots \int_{h_Q}e^{(c_Q + \vv^T\vw_Q)h_Q} dh_Q \dots dh_3 \\
@@ -483,26 +488,26 @@ terms left in the energy function do not involve product bwteeen hidden units (R
 \end{align*}
 where $\vw_j$ is the $j$ th column in the $P \times Q$ connection (weight) matrix $\mw$. Now we have
 \begin{align*}
-  -\log{\int_{\vh}{e^{-E(\vv, \vh)}} d\vh} = -e^{\vv^T\vb} - \sum_{j=1}^Q{\log{(e^{c_j + \vv^T\vw_j}+1)}}.
+  -\log{\int_{\vh}{e^{\vv^T\vb + \vc^T\vh + \vv^T\mw\vh}} d\vh} = -e^{\vv^T\vb} - \sum_{j=1}^Q{\log{(e^{c_j + \vv^T\vw_j}+1)}}.
 \end{align*}
 Now it is easy to derive the gradient of positive phase w.r.t. $\pEC=\{\vb, \vc, \mw\}$:
 \begin{align*}
-  -\PDV{\log{\int_{\vh} e^{-E(\vv, \vh)}} d\vh}{\vw_j}
-  & = -\frac{\vv^T e^{c_j + \vv^T\vw_j}}{e^{c_j + \vv^T\vw_j}+1} = -\vv\sigma(c_j + \vv^T\vw_j) \\
-  \Rightarrow -\PDV{\log{\int_{\vh} e^{-E(\vv, \vh)}} d\vh}{\mw}
-  & = -\vv\sigma(\vc^T + \vv^T\mw) \\
-  -\PDV{\log{\int_{\vh} e^{-E(\vv, \vh)}} d\vh}{c_j}
-  & = -\frac{c_j e^{c_j + \vv^T\vw_j}}{e^{c_j + \vv^T\vw_j}+1} = -c_j\sigma(c_j + \vv^T\vw_j) \\
-  \Rightarrow -\PDV{\log{\int_{\vh} e^{-E(\vv, \vh)}} d\vh}{\vc}
-  & = -\diag{\vc} \sigma(\vc + \vv^T\mw) \\
-  \textrm{and } -\PDV{\log{\int_{\vh} e^{-E(\vv, \vh)}} d\vh}{\vb}
-  & = -\vv
+  -\PDV{\log{\int_{\vh} e^{\vv^T\vb + \vc^T\vh + \vv^T\mw\vh}} d\vh}{\vw_j}  & = -\frac{\vv^T e^{c_j + \vv^T\vw_j}}{e^{c_j + \vv^T\vw_j}+1} = -\vv\sigma(c_j + \vv^T\vw_j) \\
+  \Rightarrow
+  -\PDV{\log{\int_{\vh} e^{\vv^T\vb + \vc^T\vh + \vv^T\mw\vh}} d\vh}{\mw}    & = -\vv\sigma(\vc^T + \vv^T\mw) \\
+  % 
+  -\PDV{\log{\int_{\vh} e^{\vv^T\vb + \vc^T\vh + \vv^T\mw\vh}} d\vh}{c_j}    & = -\frac{c_j e^{c_j + \vv^T\vw_j}}{e^{c_j + \vv^T\vw_j}+1} = -c_j\sigma(c_j + \vv^T\vw_j) \\
+  \Rightarrow
+  -\PDV{\log{\int_{\vh} e^{\vv^T\vb + \vc^T\vh + \vv^T\mw\vh}} d\vh}{\vc}    & = -\bs{I}_{\vc} \sigma(\vc + \vv^T\mw) \\
+  % 
+  \textrm{and }
+  -\PDV{\log{\int_{\vh} e^{\vv^T\vb + \vc^T\vh + \vv^T\mw\vh}} d\vh}{\vb}    & = -\vv
 \end{align*}
-The negative phase can be done in exactly the same way plus the sum rule in differentiation. 
+The negative phase can be done in exactly the same way with the sum rule in differentiation.
 \subsection{RBM with Symbolic Library}
 The primative update rules are necessary for developing both BM and RBM trainer from scratch, in case of available symbolic mathematics libraries however, such as Python-Theano and Matlab-Symbolic, it is often unnecessary, or even over-developing to implement the primative rules in Eq.\,\eqref{eq:gv3} directly through algorithm \eqref{alg:gbm1} and \eqref{alg:rbm1} . Instead, it would be more efficient and easier to just construct a crude objective function, then let the software packages to figure out the gradient, and subsequently, the update rules. 
 which involves the mean of marginal distribution $\Pr(\vvt)$, posing a severe challenge to direct evaluation attempt, we instead resort to approximation via limited sampling from $\Pr(\vvt)$:
-\begin{align}\label{eq:rbm:gv1}
+\begin{align}\label{eq:rbm:gv2}
   -\log{\Pr(\vv)} \approx -\log{\int_{\vh} e^{-E(\vv, \vh)} d\vh} + \frac{1}{|M|}\sum_{\vvt \in M}{\log{\int_{\vh} e^{-E(\vvt, \vh)}d\vh}}
 \end{align}
 where $M$ is the set of samples drawn from $\Pr(\vvt)$. \\

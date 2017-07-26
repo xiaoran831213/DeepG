@@ -15,45 +15,43 @@ cat.rpt <- function(fr, bind=1)
     dt
 }
 
-.power <- function(p, thd=.05) sum(p < thd, na.rm=T) / sum(!is.na(p))
-
 sum.rpt <- function(r)
 {
-    .power <- function(p) sum(p < .05, na.rm=T) / sum(!is.na(p))
+    .pw <- function(p) sum(p < .05, na.rm=T) / sum(!is.na(p))
     r$fnm <- NULL
+    r$seq <- NULL
     pv.keys <- grep('^pvl', names(r), value=T)
     dt.keys <- c(pv.keys, 'ngv', 'eot', 'eov')
     ix.keys <- names(r)[!names(r) %in% dt.keys]
     ix <- r[, ix.keys]
     su <- by(r, ix, function(r)
     {
-        pow <- lapply(r[, pv.keys], .power)
+        pow <- lapply(r[, pv.keys], .pw)
         r <- data.frame(
             r[1, ix.keys],
             pow,
             itr = nrow(r),
-            ## avg.eov=mean(r$eov),
             stringsAsFactors=F)
         r
     })
     su <- do.call(rbind, su)
-    su <- within(su,
-    {
-        wdp=log2(max(nhf)/nhf) + 1
-    })
+    su <- within(su, wdp <- log2(max(nhf)/nhf) + 1)
     su
 }
 
-plt <- function(su, x.axi='r2', grid=nhf~mdl, out=NULL)
+plt <- function(su, x.axi='r2', grid=nhf~mdl, x.cat=F, out=NULL)
 {
     nm <- grep('^pvl', names(su), value=TRUE)
     su <- reshape(su, nm, 'pow', 'test', direction='long')
     su <- within(su, test <- sub('^pvl.', '', nm)[test])
+    su$id <- NULL
 
     ## order test types
     od <- c(hof=1, rsd=2, dsg=3, ibs=4, xmx=5)
     su <- within(su, test <- reorder(test, od[test]))
     names(su)[names(su) == x.axi] = 'x'
+    if(x.cat)
+        su$x <- as.factor(su$x)
     
     ## create title from constant fields
     .u <- sapply(lapply(su, unique), length) == 1L
@@ -84,7 +82,7 @@ plt <- function(su, x.axi='r2', grid=nhf~mdl, out=NULL)
         gy <- 1
     }
     
-    g <- g + geom_line(aes(x=x, y=pow, color=test))
+    g <- g + geom_line(aes(x=x, y=pow, color=test, group=test))
     g <- g + xlab(x.axi)
     g <- g + ylab('pow')
     g <- g + ggtitle(tl)
@@ -102,10 +100,10 @@ tmp <- function()
 {
     m <- mdl~wdp
 
-    s <- sum.rpt(readRDS('rpt/rsq_gxg_gau.rds'))
-    p1=plt(subset(s, T, -c(pvl.dsg, pvl.xmx)), 'r2', m, out='rpt/img/rsq_gxg_gau_ibs.png')
-    p2=plt(subset(s, T, -c(pvl.ibs, pvl.xmx)), 'r2', m, out='rpt/img/rsq_gxg_gau_dsg.png')
-    p3=plt(subset(s, T, -c(pvl.ibs, pvl.dsg)), 'r2', m, out='rpt/img/rsq_gxg_gau_xmx.png')
+    s <- sum.rpt(readRDS('rpt/rsq_ggg_gau.rds'))
+    p1=plt(subset(s, se=-c(pvl.dsg, pvl.xmx)), 'r2', m, out='rpt/img/rsq_ggg_gau_ibs.png')
+    p2=plt(subset(s, se=-c(pvl.ibs, pvl.xmx)), 'r2', m, out='rpt/img/rsq_ggg_gau_dsg.png')
+    p3=plt(subset(s, se=-c(pvl.ibs, pvl.dsg)), 'r2', m, out='rpt/img/rsq_ggg_gau_xmx.png')
 
     s1 <- sum.rpt(readRDS('rpt/rsq_gxg_fp1.rds'))
     s2 <- sum.rpt(readRDS('rpt/rsq_gno_fp1.rds'))

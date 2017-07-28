@@ -81,6 +81,7 @@ gem <- function(mdl=~ a + d + r, G,   # model, and raw data.
                 max.gvr=32,           # maximum number of variants
                 max.tms=4096,         # naximum number of terms
                 rm.nic=T,             # remove non-informative columns
+                rm.dup=T,             # remove unintentionally duplicated columns
                 baf=F,                # effect by allele frequency?
                 fpr=0,                # frequency of parity
                 ...)
@@ -101,11 +102,11 @@ gem <- function(mdl=~ a + d + r, G,   # model, and raw data.
     
     ## genetic bases
     gbs <- list()
-    if(any(c('a', 'g', 'aA', 'gA') %in% vs))
+    if(any(c('a', 'g') %in% vs))
         gbs[['a']] <- G                 # additive
-    if(any(c('d', 'g', 'dA', 'gA') %in% vs))
+    if(any(c('d', 'g') %in% vs))
         gbs[['d']] <- (G>0) * 2         # dominance
-    if(any(c('r', 'g', 'rA', 'gA') %in% vs))
+    if(any(c('r', 'g') %in% vs))
         gbs[['r']] <- (G>1) * 2         # rescessive
     if(gcd > 0)
         gbs <- lapply(gbs, `-`, 1)
@@ -133,7 +134,7 @@ gem <- function(mdl=~ a + d + r, G,   # model, and raw data.
     gbs[['g']] <- do.call(rbind, gbs)
 
     ## parity, pooled from 4 differenct sets of variants
-    if(any(c('p', 'pA') %in% vs) && fpr > 0)
+    if('p' %in% vs && fpr > 0)
     {
         ## number of parity-variants
         npr <- ifelse(fpr > 1, fpr, nrow(G) * fpr)
@@ -148,27 +149,56 @@ gem <- function(mdl=~ a + d + r, G,   # model, and raw data.
         gbs['p'] <- parity[4]
     }
     gbs <- lapply(gbs, t)
-    
-    ## make more soft copies of bases
-    if('aA' %in% vs)
-        gbs[paste('a', LETTERS[1:3], sep='')] <- gbs[rep('a', 3)]
-    if('gA' %in% vs)
-        gbs[paste('g', LETTERS[1:3], sep='')] <- gbs[rep('g', 3)]
 
     ## prepare model matrix
     mm <- model.matrix(tms, gbs)
     rownames(mm) <- colnames(G)
-    colnames(mm) <- gsub('[I( )]', '', colnames(mm))
-    assign <- attr(mm, 'assign')
+
+    ## fix term names
+    cn <- gsub('[I()]|\\[|\\]', '', colnames(mm))
+    cn <- sapply(strsplit(cn, ':'), function(x) paste0(sort(x), collapse=':'))
+    cn <- sub('([a-z]+)(\\^[0-9])([0-9]+)', '\\1\\3\\2', cn)
     
+    ## remove duplicated terms
+    assign <- attr(mm, 'assign')
+    msk <- !duplicated(cn)
+    if(sum(msk) < ncol(mm))
+    {
+        print(sprintf('drop %d duplicated terms.', ncol(mm) - sum(msk)))
+        mm <- mm[, msk, drop=F]; assign <- assign[msk]; cn <- cn[msk]
+    }
+
+    ## remove artificially created polynomial terms
+    msk <- !grepl('(.*):\\1', cn)
+    if(sum(msk) < ncol(mm))
+    {
+        print(sprintf('drop %d artificial polynomial.', ncol(mm) - sum(msk)))
+        mm <- mm[, msk, drop=F]; assign <- assign[msk]; cn <- cn[msk]
+    }
+
+    ## sort the terms
+    ## idx <- order(cn)
+    ## mm <- mm[, idx]; assign <- assign[idx]; cn <- cn[idx]
+
+    ## assign fixed term names
+    colnames(mm) <- cn; rm(cn)
+
     ## keep informative columns
-    msk <- apply(mm, 2, sd) != 0
+    msk <- apply(mm, 2, sd) > 0
     drp <- ncol(mm) - sum(msk)
     if(drp > 0 && rm.nic)
     {
-        ## print(sprintf('drop %d non-informative columns.', drp))
+        print(sprintf('drop %d non-informative columns.', drp))
         mm <- mm[, msk, drop=FALSE]
         assign <- assign[msk]
+    }
+
+    ## keep unique columns
+    .nc <- ncol(mm)
+    mm <- unique(mm, MARGIN=2)
+    if(.nc > ncol(mm) && rm.dup)
+    {
+        print(sprintf('drop %d duplicated columns.', .nc-ncol(mm)))
     }
 
     ## crop excessive columns
@@ -197,7 +227,7 @@ test <- function(...)
     g1 <- matrix(sample.int(3, P*9, T)-1, P, 9)
     rownames(g1) <- sprintf('%02d', 1:P)
     
-    m1 <- gem(~ g:p, G=g1, rm.nic=F, ...)
+    m1 <- gem(~ g*g[] + I(g^2), G=g1, rm.nic=T, ...)
     ## m1 <- gem(~ gA:gB:gC, G=g1, rm.nic=T)
     m1
 }

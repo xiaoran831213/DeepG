@@ -55,8 +55,9 @@ plt <- function(su, x.axi='r2', grid=nhf~mdl, x.cat=F, out=NULL)
     
     ## create title from constant fields
     .u <- sapply(lapply(su, unique), length) == 1L
-    tl <- paste(names(su)[.u], sapply(su[.u], `[`, 1), sep='=', collapse=', ')
-
+    tl <- sapply(su[1, .u], as.character)
+    tl <- paste(names(tl), tl, sep='=', collapse=', ')
+    
     g <- ggplot(su)
     if(!is.null(grid))
     {

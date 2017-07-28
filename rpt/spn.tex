@@ -1,4 +1,4 @@
-\documentclass[11pt]{article}
+\documentclass[11pt]{book}
 \usepackage{textcomp,bbding,subfig}
 \usepackage{float,amssymb,amsmath,amsfonts,bm}
 \usepackage{graphicx,cite}
@@ -26,7 +26,7 @@
 % no indent for any paragraphs
 \setlength\parindent{0pt}
 %
-\numberwithin{equation}{section}
+\numberwithin{equation}{chapter}
 %
 % aliasis
 % FreeSurfer from Havord Unv.
@@ -61,21 +61,24 @@ Michigan State University\\
 East Lansing, MI 48824--1030\\
 \end{flushleft}
 \clearpage
-\section{The Ising Magnetic Systems}
-\subsection{General principles of the statistical mechanics}
-The state of a system is represented by $N$-d variable $\vs=[s_1, s_2, \dots, s_N]^T$. An observable quantity of the system is a function of its state $A(\vs)$. The form of $A$ is versatile, but the most basic one is called \textit{engery} $H$, a function defined on $\vs: H = H(\vs)$ that characterize each state, and further characterize the dynamic behavior of the system. In most cases, the mean value of quantity $A$ is of best interests, which can be formally obtained via a infinitely long peroid of observation:
-\begin{equation} %\label{eq:mu(A,t)}
+\chapter{The Ising Magnetic Systems}
+\section{General principles of the statistical mechanics}
+The state of a system is represented by $N$-d variable $\vs=[s_1, s_2, \dots, s_N]^T$. An observable quantity of the system is a function of its state $A(\vs)$. The form of $A$ is versatile, but the most basic one is called \textit{engery} $H$, a function defined on $\vs: H = H(\vs)$ that characterize each state, and further characterize the dynamic behavior of the system.
+
+In most cases the mean quantity $A$ holds the best interests, which can be formally obtained via a infinitely long peroid of observation:
+\begin{equation} \label{eq:mu(A,t)}
   \mean{A}{t} = \lim_{t \to \infty}\frac{1}{t} \int_0^t A(\vs^{(t)})  dt
 \end{equation}
-However, the equilibrium statistical mechanics states that, after a infinitely long period of observation, the system has ``visited'' its distinct states many times, and therefore the mean over time in Eq.\,\eqref{eq:mu(A,t)} can be replaced by the mean over \textit{assemble} of the states:
+The equilibrium statistical mechanics states that, after a infinitely long period of observation, the system has ``visited'' its distinct states many times, and therefore the mean over time in Eq.\,\eqref{eq:mu(A,t)} can be replaced by the mean over \textit{assemble} of the states:
 \begin{align}\label{eq:mu(A,s)}
   \mean{A}{\vs} = \int_{\vs} A(\vs)\Pr(\vs) d\vs.
 \end{align}
-Here, $\Pr(\vs)$ is the \textit{probability density function} (PDF) of the sytem states, which must satisfy
+Here, $\Pr(\vs)$ is the \textit{probability density function} (PDF) of the sytem states, which must satisfies
 \begin{align}\label{eq:int_s{p(s)}==1}
   \int_{\vs} \Pr(\vs) d\vs = 1
 \end{align}
-in order to be a valid PDF. \\
+in order to be a valid PDF.
+
 To characterize the probility distribution $\Pr(\vs)$ itself, statistical mechanics introduces the concept of entropy $S$, which is defined as the mean negative logarithm of the density itself:
 \begin{align}
   S = \mean{-\log{P(\vs)}}{\vs} = \int{[-\log{P(\vs)}]P(\vs)d\vs}.

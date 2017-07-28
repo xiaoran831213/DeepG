@@ -34,8 +34,6 @@
 \newcommand{\mean}[2]{\left\langle{#1}\right\rangle_{#2}}
 % vector, matrices
 \newcommand{\vs}{\bs{s}}
-% others
-\newcommand{\ev}[1]{\langle #1 \rangle}
 % derivative
 \newcommand{\DRV}[2]{\frac{d #1}{d #2}}
 \newcommand{\DRC}[3]{\DRV{#1}{#2}\DRV{#2}{#3}}
@@ -74,7 +72,7 @@ The equilibrium statistical mechanics states that, after a infinitely long perio
   \mean{A}{\vs} = \int_{\vs} A(\vs)\Pr(\vs) d\vs.
 \end{align}
 Here, $\Pr(\vs)$ is the \textit{probability density function} (PDF) of the sytem states, which must satisfies
-\begin{align}\label{eq:int_s{p(s)}==1}
+\begin{align}\label{eq:int(p)=1}
   \int_{\vs} \Pr(\vs) d\vs = 1
 \end{align}
 in order to be a valid PDF.
@@ -83,18 +81,20 @@ To characterize the probility distribution $\Pr(\vs)$ itself, statistical mechan
 \begin{align}
   S = \mean{-\log{P(\vs)}}{\vs} = \int{[-\log{P(\vs)}]P(\vs)d\vs}.
 \end{align}
-Entropy is non-negative, it measures how un-order the system is. In general, the flatter the distribution $P$ is, the larger the entroy $S$ become (i.e.\, so un-ordered that many states have a fair chance to occue); on the countrary, a point mass distribution $\delta(s_0)$ has 0 entropy (i.e.\, extremely ordered that only one state dominants the system)
+Entropy is non-negative, it measures how chaotic the system is. In general, the flatter the distribution $P$ is, the larger the entroy $S$ become (i.e.\, so un-ordered that many states have a fair chance to occue); on the countrary, a point mass distribution $\delta(s_0)$ has 0 entropy (i.e.\, extremely ordered that only one state dominants the system)
 
-Another fundamental function on $\vs$ is the aforementioned \textit{engery} $H$, whose expectation is the mean enegy $E$:
-\[ E = \ev{H(\vs)} = \int{H(\vs)P(\vs)d\vs} \]
-
-The form of $P(\vs)$ and $H(\vs)$ cannot be arbitrary, the nature dictates that 1) without interference, the system energy $E$ is conserved; 2) when it reaches equilibrium, the entropy $S$ is at possible maximum (or, to maintain the entropy $S$, the mean engery $E$ would go as low as possible).
-
-With these constraints, the relationship between state engery $H$ and state probability $P$ at system equilibrium  is:
+\textbf{work out the general form of Pr(\textbf{s})} \\
+Nature dictates that:\\
+(1) without interference (e.g., chane of temperature or pressure), the mean system ergery
+\begin{align}
+  E = \mean{H(\vs)}{\vs} = \int_{\vs} H(\vs)\Pr(\vs) d\vs
+\end{align}
+is conserved; 
+(2) when it researches thermal equilibrium, the entrophy $S$ is at possible maximum, that is, $\PDV{S}{a}=0$. These rules, coupled with Eq.\,\eqref{eq:int(p)=1} implies the relationship between the forms of energy $H(\vs)$ and probability $\Pr(\vs)$ as
 \begin{equation}
   \begin{split}
     \PDV{S}{\vs} = 0 
-    \quad\textrm{s.t.}\quad\int{H(\vs)P(\vs)d\vs} = E, \textrm{and} \int{P(\vs)d\vs} = 1.
+    \quad\textrm{s.t.}\quad\int{H(\vs)P(\vs)d\vs} = E \textrm{, and} \int{P(\vs)d\vs} = 1.
   \end{split}
 \end{equation}
 

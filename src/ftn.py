@@ -6,7 +6,7 @@ from xnnt.sae import SAE
 from xutl import lpz, spz
 
 
-# r=main("sim/GMX/D02/0003.pgz", nep=200, wdp=2, lrt=5e-4, acc=1.01, ovr=1)
+# r=main("../raw/W09/0003.npz", nep=200, wdp=2, lrt=5e-4, acc=1.01, ovr=1)
 def main(fnm, **kwd):
     """ the fine-tune procedure for Stacked Autoencoder(SAE).
 

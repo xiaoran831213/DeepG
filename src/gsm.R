@@ -89,7 +89,16 @@ gem <- function(mdl=~ a + d + r, G,   # model, and raw data.
     ## pick genomic variables
     if(nrow(G) > max.gvr)
         G <- G[sort(sample.int(nrow(G), max.gvr)), ]
-    
+
+    ## pick out informative variants
+    msk <- apply(G, 1, sd) > 0
+    drp <- nrow(G) - sum(msk)
+    if(drp > 0 && rm.nic)
+    {
+        print(sprintf('drop %d non-informative variants.', drp))
+        G <- G[msk, , drop=FALSE]
+    }
+
     ## terms and varialbes
     tms <- terms(mdl)
     attr(tms, 'intercept') <- 0
@@ -111,7 +120,6 @@ gem <- function(mdl=~ a + d + r, G,   # model, and raw data.
     if(gcd > 0)
         gbs <- lapply(gbs, `-`, 1)
 
-
     ## by allele frequency (favor low MAF)?
     maf <- rowMeans(G) / 2.0
     if(baf != 0)
@@ -127,9 +135,11 @@ gem <- function(mdl=~ a + d + r, G,   # model, and raw data.
 
     ## evenly assign the 3 type of bases to variants
     msk <- sample(1:nrow(G) %% length(gbs) + 1)
-    for(i in 1:length(gbs))
+    i <- 1
+    while(i < length(gbs))
     {
         gbs[[i]] <- gbs[[i]][msk==i, , drop=F]
+        i <- i + 1
     }
     gbs[['g']] <- do.call(rbind, gbs)
 
@@ -137,17 +147,13 @@ gem <- function(mdl=~ a + d + r, G,   # model, and raw data.
     if('p' %in% vs && fpr > 0)
     {
         ## number of parity-variants
-        npr <- ifelse(fpr > 1, fpr, nrow(G) * fpr)
-        parity <- replicate(4, 
-        {
-            x <- G[sample.int(nrow(G), round(npr)), ]
-            x <- t(colSums(x) %% 2)
-            x[x<1] <- -1
-            x
-        }, FALSE)
-        gbs[paste0('p', LETTERS[1:3])] <- parity[1:3]
-        gbs['p'] <- parity[4]
+        npr <- round(ifelse(fpr < 1, nrow(G) * fpr, fpr))
+        x <- G[sample.int(nrow(G), npr), , drop=F]
+        x <- t(colSums(x) %% 2)
+        x[x < 1] <- -1
+        gbs[['p']] <- x
     }
+    ## transpose
     gbs <- lapply(gbs, t)
 
     ## prepare model matrix
@@ -217,7 +223,7 @@ gem <- function(mdl=~ a + d + r, G,   # model, and raw data.
 mdl.str <- function(mdl)
 {
     mdl <- tail(as.character(mdl), 1)
-    mdl <- gsub('[ I()ABC]', '', mdl)
+    mdl <- gsub('[I() ]|\\[|\\]', '', mdl)
     mdl <- gsub('\\+-', '-', mdl)
     mdl
 }
@@ -227,7 +233,6 @@ test <- function(...)
     g1 <- matrix(sample.int(3, P*9, T)-1, P, 9)
     rownames(g1) <- sprintf('%02d', 1:P)
     
-    m1 <- gem(~ g*g[] + I(g^2), G=g1, rm.nic=T, ...)
-    ## m1 <- gem(~ gA:gB:gC, G=g1, rm.nic=T)
+    m1 <- gem(~I(g^2), G=g1, rm.nic=T, fpr=1, ...)
     m1
 }

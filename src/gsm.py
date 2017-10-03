@@ -66,8 +66,8 @@ def sim(gmx, **kwd):
         gmx = np.hstack([gmx, emx])
     if '^' in mdl:              # squared
         gmx = gmx ** 2
-    if 'p' in mdl:              # parity
-        fpr = kwd.get('fpr', 1)
+    if mdl.startswith('p'):     # parity
+        fpr = float(mdl[1:])
         if fpr is not None:
             fpr = int(P * fpr) if fpr < 1 else int(fpr)
             idx = gmx[:, choice(P, fpr)].sum(1).astype('<i4') % 2
@@ -81,10 +81,10 @@ def sim(gmx, **kwd):
         P = gmx.shape[1]
 
     # remove duplicated bases
-    gmx = np.unique(gmx, axis=1)
-    if gmx.shape[1] < P:
-        print('SIM: drop', P - gmx.shape[1], 'duplicate base expansion.')
-        P = gmx.shape[1]
+    # gmx = np.unique(gmx, axis=1)
+    # if gmx.shape[1] < P:
+    #     print('SIM: drop', P - gmx.shape[1], 'duplicate base expansion.')
+    #     P = gmx.shape[1]
 
     # weights drawn from Gaussian
     w = normal(size=[P, 1])
@@ -104,12 +104,13 @@ def sim(gmx, **kwd):
     # put through link function
     fam = kwd.get('fam', 'gau')
     if fam == 'sin':
-        phe = np.sin(eta)
+        eta = (eta - eta.min()) / (eta.max() - eta.min()) * np.pi * 2.0
+        y = np.sin(eta)
     elif fam == 'bin':
         mu = rsq/(1 + np.exp(-xw)) + (1 - rsq) * 0.5
-        phe = np.random.binomial(1, mu).reshape(N, 1)
+        y = np.random.binomial(1, mu).reshape(N, 1)
     else:
-        phe = eta
-    phe = phe.astype('f')
+        y = eta
+    y = y.astype('f')
 
-    return phe
+    return y

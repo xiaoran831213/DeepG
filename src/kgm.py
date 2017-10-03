@@ -9,10 +9,13 @@ from scipy.stats import zscore
 from sklearn.decomposition import PCA
 from numpy.random import permutation
 from gsm import sim
+from functools import reduce
 import pandas as pd
 
 
-# r=main('../1kg/rnd/0009', sav='../tmp',fam='bin', req=.8, nptr=[], N=1000, P=1000, nep=500, xtp='gmx')
+# r=main('../1kg/rnd/0009', sav='../tmp', lr=3e-3, nptr=[], N=500, P=3000, rsq=1.0, nep=0)
+# r.bmk[np.logical_or(r.bmk.par=='verr', r.bmk.mtd!='nnt')]
+# r.bmk[np.logical_or(r.bmk.par=='vcor', r.bmk.mtd!='nnt')]
 def main(fnm, **kwd):
     """ the fine-tune procedure for Stacked Autoencoder(SAE).
     -- fnm: filename to the input data.
@@ -38,13 +41,21 @@ def main(fnm, **kwd):
     be [2*P] + dim + [1] for flattened genotype input.
 
     ** seed: controls random number generation.
+
+    ** svn: save network? it may take large amount of disk space and slow
+    to reload.
     """
     from xutl import lpg, spg
 
     # for now, always start over the training.
-    prg, kwd = lpg(fnm, prg=2, **kwd)
+    prg = kwd.pop('prg', 2)
+    prg, kwd = lpg(fnm, prg=prg, vbs=1, **kwd)
 
     # should we even start?
+    if prg == 0:
+        print('NT: Done.')
+        return kwd
+    
     hte = kwd.pop('hte', 0.0)
     print('NT: HTE = {}'.format(hte))
     eot = kwd.get('eot', 1e9)
@@ -72,7 +83,7 @@ def main(fnm, **kwd):
         gmx = gmx[idx, :, :][:, :, jdx]
         phe = sim(gmx, **kwd)  # puts in phenotype
         kwd.update(gmx=gmx, phe=phe)
-
+    
     # -------------- y and x -------------- #
     gmx = kwd['gmx']
     phe = kwd['phe']
@@ -108,12 +119,15 @@ def main(fnm, **kwd):
 
     N = xmx.shape[0]
     div = int(kwd.get('div', 0.80) * N)
+    xmk = zscore(dsg, 0) if kwd.get('zsc', False) else dsg
+    xmk = np.concatenate([np.ones_like(phe), xmk], 1)
+    
     if div < N:
         xT, xE = xmx[:div, :], xmx[div:, :]
         yT, yE = phe[:div, :], phe[div:, :]
 
         # for kernel methods
-        xKT, xKE = dsg[:div, :], dsg[div:, :]
+        xKT, xKE = xmk[:div, :], xmk[div:, :]
         yKT, yKE = yT, yE
 
         # further divide training set for NNT
@@ -128,19 +142,36 @@ def main(fnm, **kwd):
     fam = kwd.get('fam', 'gau')
     if prg == 2:
         if fam == 'bin':
-            from bmk import svclf, dtclf
+            from bmk import svclf, dtclf, nul
             bmk = np.concatenate([
                 svclf(xKT, yKT, xKE, yKE),  # Support vector
                 dtclf(xKT, yKT, xKE, yKE)   # Decision Tree
             ])
         else:
-            from bmk import knreg, svreg, dtreg
-            bmk = np.concatenate([
+            from bmk import knreg, svreg, dtreg, nul
+            bmk = pd.concat([
                 knreg(xKT, yKT, xKE, yKE),  # Kernel_ridge
                 svreg(xKT, yKT, xKE, yKE),  # Support vector
-                dtreg(xKT, yKT, xKE, yKE)   # Decision Tree
+                # dtreg(xKT, yKT, xKE, yKE)   # Decision Tree
             ])
+        bmk = bmk.append(nul(xKT, yKT, xKE, yKE, fam))
+
+        # difference of error and relative error wrt. null model
+        _lg = (bmk.mtd == 'nul', bmk.par == '-', bmk.key == 'ERR')
+        bas = bmk.val[reduce(np.logical_and, _lg)][0]
+        cpy = bmk[bmk.key == 'ERR'].copy()
+        cpy.loc[:, 'val'] = cpy.val - bas
+        cpy.loc[:, 'key'] = 'DFF'
+        bmk = bmk.append(cpy)
+
+        cpy = bmk[bmk.key == 'ERR'].copy()
+        cpy.loc[:, 'val'] = cpy.val / bas
+        cpy.loc[:, 'key'] = 'REL'
+        bmk = bmk.append(cpy)
+
         kwd.update(bmk=pd.DataFrame(bmk))
+    else:
+        bmk = kwd['bmk']
 
     # train the network, create it if necessary
     nwk = kwd.pop('nwk', None)
@@ -160,7 +191,7 @@ def main(fnm, **kwd):
 
     # training
     kwd['err'] = 'CE' if fam == 'bin' else 'L2'
-    kwd['hvp'] = kwd.get('nep', 0)  # infinite patience
+    kwd['hvp'] = kwd.get('hvp', np.inf)  # infinite patience
     kwd['bdr'] = 0  # no bold driving
     kwd['hte'] = hte
     kwd['bsz'] = 50
@@ -172,12 +203,32 @@ def main(fnm, **kwd):
 
     lr = ftn.lr.get_value()
     hst = ftn.hist()
+
+    # record NNT performance on generalization set
+    e = hst.loc[hst.verr.idxmin()]
+    _lg = (bmk.mtd == 'nul', bmk.par == '-', bmk.key == 'ERR')
+    bas = bmk.val[reduce(np.logical_and, _lg)][0]
+    acc = [dict(key='ERR', val=e.gerr),
+           dict(key='COR', val=e.gcor)]
+    if fam == 'bin':
+        acc.append(dict(key='AUC', val=e.gauc))
+    acc.append(dict(key='DFF', val=e.gerr - bas))
+    acc.append(dict(key='REL', val=e.gerr / bas))
+    acc.append(dict(key='EPN', val=e.ep))
+    acc = pd.DataFrame(acc)
+    acc.loc[:, 'mtd'] = 'nnt'
+    acc.loc[:, 'par'] = 'mve'
+    bmk = bmk.append(acc)
+
+    # report halting
     if ftn.hlt:
-        print('NT: Halt,', ftn.hlt)
+        print('NT: Halt=', ftn.hlt)
 
     # 3) update progress and save. for now, network is not saved to speed up
     # reporting, only the shape is saved.
-    kwd.update(lr=lr, hst=hst)
+    kwd.update(lr=lr, hst=hst, bmk=bmk)
+    if(kwd.get('svn', False)):
+        kwd.update(nwk=nwk)
     spg(**kwd)
     print('NT: Done.')
 
@@ -208,68 +259,32 @@ def collect(fdr='.', nrt=None):
         cf = ['fam', 'xtp', 'frq', 'mdl', 'rsq', 'gdy', 'gtp']
         cf = dict((k, v) for k, v in pgz.items() if k in cf)
         cf['nxp'] = '{}x{}'.format(pgz['gmx'].shape[0], pgz['gmx'].shape[2])
-        cf['nwk'] = '{}x{}'.format(len(pgz['dim']), pgz['dim'][0])
+        cf['nwk'] = '{}x{:4d}'.format(len(pgz['dim']), pgz['dim'][0])
         cf = pd.Series(cf)
         cfg.append(cf)
 
         # 3) collect reference benchmarks, also append the performance of NNT
-        bm = pgz.pop('bmk')
-        bm['epn'] = np.nan
-
-        # generalization accuracy at minimum validation error
-        e = hs.loc[hs.verr.idxmin()]
-        e = dict(mtd='nnt', par='verr', err=e.gerr, cor=e.gcor,
-                 epn=e.ep, auc=e.gauc if cf.fam == 'bin' else np.nan)
-        bm = bm.append(e, ignore_index=True)
-
-        # generalization accuracy at maximum validation correlation
-        e = hs.loc[hs.vcor.idxmax()]
-        e = dict(mtd='nnt', par='vcor', err=e.gerr, cor=e.gcor,
-                 epn=e.ep, auc=e.gauc if cf.fam == 'bin' else np.nan)
-        bm = bm.append(e, ignore_index=True)
-        # generalization accuracy at maximum validation AUC
-        if cf.fam == 'bin':
-            e = hs.loc[hs.vauc.idxmax()]
-            e = dict(mtd='nnt', par='vauc', err=e.gerr,
-                     epn=e.ep, cor=e.gcor, auc=e.gauc)
-            bm = bm.append(e, ignore_index=True)
-
-        # when the lowest generalization happened.
-        e = hs.loc[hs.gerr.idxmin()]
-        _ = dict(mtd='nnt', par='gerr', err=e.gerr, cor=e.gcor,
-                 epn=e.ep, auc=e.gauc if cf.fam == 'bin' else np.nan)
-        bm = bm.append(_, ignore_index=True)
-
-        # when the heighest generalization correlation happend.
-        e = hs.loc[hs.gcor.idxmax()]
-        _ = dict(mtd='nnt', par='gcor', err=e.gerr, cor=e.gcor,
-                 epn=e.ep, auc=e.gauc if cf.fam == 'bin' else np.nan)
-        bm = bm.append(_, ignore_index=True)
-        bmk.append(bm)
-
-        # when the heighest generalization AUC happened.
-        if cf.fam == 'bin':
-            e = hs.loc[hs.gauc.idxmax()]
-            e= dict(mtd='nnt', par='vauc', err=e.gerr,
-                    epn=e.ep, cor=e.gcor, auc=e.gauc)
-            bm = bm.append(e, ignore_index=True)
+        bmk.append(pgz.pop('bmk').reset_index())
 
     # concatenation
     _df = []
     for c, b in zip(cfg, bmk):
         _df.append(pd.concat([pd.DataFrame([c] * b.shape[0]), b], 1))
+
     bmk = pd.concat(_df)
     # non-NNT methods do not rely on these parameters
     bmk.loc[bmk.mtd != 'nnt', ['gtp', 'nwk', 'nxp', 'xtp']] = '-'
 
     # configuration keys and report keys
-    cfk = cf.index.tolist() + ['mtd', 'par']
+    cfk = cf.index.tolist() + ['mtd', 'par', 'key']
     _gp = bmk.groupby(cfk)
-    # means, stds, and iteration count
-    _mu = _gp.mean().rename(columns=lambda n: 'mu(' + n + ')')
-    _sd = _gp.std().rename(columns=lambda n: 'sd(' + n + ')')
-    _it = _gp.err.count().rename('itr')
-    bmk = pd.concat([_mu, _sd, _it], 1).reset_index()
+    # means, stds, and iteration count of 'val'
+    _mu = _gp.val.mean().rename('mu')
+    _sd = _gp.val.std().rename('sd')
+    _sc = (_mu / _sd).rename('sc')
+    _it = _gp.val.count().rename('itr')
+    bmk = pd.concat([_mu, _sd, _sc, _it], 1).reset_index()
+    bmk = bmk.loc[:, cfk + ['mu', 'sd', 'sc', 'itr']]
 
     # do the same for training history
     hst = pd.concat(hst)

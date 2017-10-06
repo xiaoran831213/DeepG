@@ -1,16 +1,21 @@
 # fine-tuner for neural networks
-from os import path as pt, listdir as ls
+from functools import reduce
+from numpy.random import permutation
+from os import listdir as ls, path as pt
+
+import matplotlib.cbook as cbook
+import matplotlib.pyplot as plt
 import numpy as np
-from xutl import lpz
-from xutl.xdct import xdct
-from xnnt.mlp import MLP
-from xnnt.tnr.basb import Base as Tnr
+import pandas as pd
+from bunch import Bunch
 from scipy.stats import zscore
 from sklearn.decomposition import PCA
-from numpy.random import permutation
+from xnnt.mlp import MLP
+from xnnt.tnr.basb import Base as Tnr
+from xutl import spz, lpz
+
 from gsm import sim
-from functools import reduce
-import pandas as pd
+from bunch import Bunch
 
 
 # r=main('../1kg/rnd/0009', sav='../tmp', lr=3e-3, nptr=[], N=500, P=3000, rsq=1.0, nep=0)
@@ -55,7 +60,7 @@ def main(fnm, **kwd):
     if prg == 0:
         print('NT: Done.')
         return kwd
-    
+
     hte = kwd.pop('hte', 0.0)
     print('NT: HTE = {}'.format(hte))
     eot = kwd.get('eot', 1e9)
@@ -83,7 +88,7 @@ def main(fnm, **kwd):
         gmx = gmx[idx, :, :][:, :, jdx]
         phe = sim(gmx, **kwd)  # puts in phenotype
         kwd.update(gmx=gmx, phe=phe)
-    
+
     # -------------- y and x -------------- #
     gmx = kwd['gmx']
     phe = kwd['phe']
@@ -121,7 +126,7 @@ def main(fnm, **kwd):
     div = int(kwd.get('div', 0.80) * N)
     xmk = zscore(dsg, 0) if kwd.get('zsc', False) else dsg
     xmk = np.concatenate([np.ones_like(phe), xmk], 1)
-    
+
     if div < N:
         xT, xE = xmx[:div, :], xmx[div:, :]
         yT, yE = phe[:div, :], phe[div:, :]
@@ -143,9 +148,9 @@ def main(fnm, **kwd):
     if prg == 2:
         if fam == 'bin':
             from bmk import svclf, dtclf, nul
-            bmk = np.concatenate([
+            bmk = pd.concat([
                 svclf(xKT, yKT, xKE, yKE),  # Support vector
-                dtclf(xKT, yKT, xKE, yKE)   # Decision Tree
+                dtclf(xKT, yKT, xKE, yKE)  # Decision Tree
             ])
         else:
             from bmk import knreg, svreg, dtreg, nul
@@ -208,8 +213,7 @@ def main(fnm, **kwd):
     e = hst.loc[hst.verr.idxmin()]
     _lg = (bmk.mtd == 'nul', bmk.par == '-', bmk.key == 'ERR')
     bas = bmk.val[reduce(np.logical_and, _lg)][0]
-    acc = [dict(key='ERR', val=e.gerr),
-           dict(key='COR', val=e.gcor)]
+    acc = [dict(key='ERR', val=e.gerr), dict(key='COR', val=e.gcor)]
     if fam == 'bin':
         acc.append(dict(key='AUC', val=e.gauc))
     acc.append(dict(key='DFF', val=e.gerr - bas))
@@ -227,7 +231,7 @@ def main(fnm, **kwd):
     # 3) update progress and save. for now, network is not saved to speed up
     # reporting, only the shape is saved.
     kwd.update(lr=lr, hst=hst, bmk=bmk)
-    if(kwd.get('svn', False)):
+    if (kwd.get('svn', False)):
         kwd.update(nwk=nwk)
     spg(**kwd)
     print('NT: Done.')
@@ -235,10 +239,10 @@ def main(fnm, **kwd):
     kwd = dict((k, v) for k, v in kwd.items() if v is not None)
     kwd['nwk'] = nwk
     kwd['ftn'] = ftn
-    return kwd
+    return Bunch(kwd)
 
 
-def collect(fdr='.', nrt=None):
+def collect(fdr='.', nrt=None, out=None, csv=None):
     """ collect simulation report in a folder. """
     fns = sorted(f for f in ls(fdr) if f.endswith('pgz'))
 
@@ -273,7 +277,7 @@ def collect(fdr='.', nrt=None):
 
     bmk = pd.concat(_df)
     # non-NNT methods do not rely on these parameters
-    bmk.loc[bmk.mtd != 'nnt', ['gtp', 'nwk', 'nxp', 'xtp']] = '-'
+    bmk.loc[bmk.mtd != 'nnt', ['gtp', 'nwk', 'xtp']] = '-'
 
     # configuration keys and report keys
     cfk = cf.index.tolist() + ['mtd', 'par', 'key']
@@ -281,20 +285,26 @@ def collect(fdr='.', nrt=None):
     # means, stds, and iteration count of 'val'
     _mu = _gp.val.mean().rename('mu')
     _sd = _gp.val.std().rename('sd')
-    _sc = (_mu / _sd).rename('sc')
     _it = _gp.val.count().rename('itr')
-    bmk = pd.concat([_mu, _sd, _sc, _it], 1).reset_index()
-    bmk = bmk.loc[:, cfk + ['mu', 'sd', 'sc', 'itr']]
+    rpt = pd.concat([_mu, _sd, _it], 1).reset_index()
+    rpt = rpt.loc[:, cfk + ['mu', 'sd', 'itr']]
 
     # do the same for training history
     hst = pd.concat(hst)
     _gp = hst.groupby('ep')
     _it = _gp.terr.count().rename('itr')
     hst = pd.concat([_gp.mean(numeric_only=True), _it], 1).reset_index()
-    return xdct(bmk=bmk, hst=hst)
+
+    # save and return
+    ret = Bunch(bmk=bmk, hst=hst, rpt=rpt)
+    if out:
+        spz(out, ret)
+    if csv:
+        rpt.to_csv(csv)
+    return ret
 
 
-def report(sim, out=None, gui=0):
+def plot_hist(sim, out=None, gui=0):
     """ rearrange simulation pgz, report.
     sim: the outputs organized in a list of dictionaries.
     """
@@ -386,3 +396,57 @@ def report(sim, out=None, gui=0):
     # gc.savefig(fo)
 
     return gc, bmk
+
+
+# r1, p1 = plt1('~/1x1_gno.pgz')
+def plt1(rpt, key='REL', log=True):
+    """ plot supervised learning report. """
+    # load report form file if necessary.
+    sim = ['fam', 'frq', 'mdl', 'nxp']
+    nnt = ['gtp', 'xtp', 'nwk']
+    mtd = ['mtd', 'par']
+    if isinstance(rpt, str) and rpt.endswith('pgz'):
+        rpt = lpz(rpt)
+
+    # the benchmark records
+    bmk = rpt.bmk
+
+    # title
+    ttl = bmk.iloc[0][sim]
+    ttl = ', '.join('{}={}'.format(k, v) for k, v in ttl.items())
+
+    # method grouping
+    grp = nnt + mtd
+
+    # plot of relative error
+    err = bmk[bmk.key == key].loc[:, nnt + mtd + ['val']]
+    err = err[err.mtd != 'nul']
+
+    # sample some data points to craft boxplot states
+    X, L = [], []
+    for l, g in err.groupby(grp):
+        if 'nnt' in l:
+            l = "{nwk:>10}.{mtd}".format(**g.iloc[0])
+        else:
+            l = "{par:>10}.{mtd}".format(**g.iloc[0])
+        x = np.array(g.val)
+        X.append(x)
+        L.append(l)
+    X = np.array(X).T
+    S = cbook.boxplot_stats(X, labels=L)
+
+    # plot
+    plt.close('all')
+    plt.title(ttl)
+    ax = plt.axes()
+    if log:
+        ax.set_yscale('log')
+    ax.bxp(S)
+
+    # draw a line at y=1
+    x0, x1 = ax.get_xbound()
+    zx, zy = np.linspace(x0, x1, 10), np.ones(10)
+    ax.plot(zx, zy, linestyle='--', color='red', linewidth=.5)
+    for tick in ax.get_xticklabels():
+        tick.set_rotation(90)
+    return rpt, plt

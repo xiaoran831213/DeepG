@@ -103,8 +103,9 @@ def sim(gmx, **kwd):
 
     # put through link function
     fam = kwd.get('fam', 'gau')
-    if fam == 'sin':
-        eta = (eta - eta.min()) / (eta.max() - eta.min()) * np.pi * 2.0
+    if fam.startswith('sin'):
+        n2p = float(fam[3:]) if len(fam) > 3 else .5 / np.pi
+        eta = eta * np.pi * 2.0 * n2p
         y = np.sin(eta)
     elif fam == 'bin':
         mu = rsq/(1 + np.exp(-xw)) + (1 - rsq) * 0.5

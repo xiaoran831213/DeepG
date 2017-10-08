@@ -17,8 +17,7 @@ from xutl import spz, lpz
 from gsm import sim
 
 
-# r=main('../1kg/rnd/0009', sav='../tmp', lr=3e-3, nptr=[], N=500, P=3000, rsq=1.0, nep=0)
-# r=main('../1kg/rnd/0000', sav='../tmp', lr=2e-2, N=625, P=3000, dim=[1000, 100, 100], frq=.3, fam='sin0.5', rsq=1.0, nep=200)
+# r=main('../1kg/rnd/0000', seed=1, sav='../tmp', lr=1e-3, N=625, P=2000, dim=[4000, 50], frq=.5, fam='sin2.5', hvp=30, nep=500)
 def main(fnm, **kwd):
     """ the fine-tune procedure for Stacked Autoencoder(SAE).
     -- fnm: filename to the input data.
@@ -154,7 +153,7 @@ def main(fnm, **kwd):
             from bmk import knreg, svreg, dtreg, nul
             bmk = pd.concat([
                 knreg(xKT, yKT, xKE, yKE),  # Kernel_ridge
-                svreg(xKT, yKT, xKE, yKE),  # Support vector
+                # svreg(xKT, yKT, xKE, yKE),  # Support vector
                 # dtreg(xKT, yKT, xKE, yKE)   # Decision Tree
             ])
         bmk = bmk.append(nul(xKT, yKT, xKE, yKE, fam))
@@ -261,7 +260,7 @@ def collect(fdr='.', nrt=None, out=None, csv=None):
         cf = ['fam', 'xtp', 'frq', 'mdl', 'rsq', 'gdy', 'gtp']
         cf = dict((k, v) for k, v in pgz.items() if k in cf)
         cf['nxp'] = '{}x{}'.format(pgz['gmx'].shape[0], pgz['gmx'].shape[2])
-        cf['nwk'] = '{}x{:4d}'.format(len(pgz['dim']), pgz['dim'][0])
+        cf['nwk'] = pgz['dim']
         cf = pd.Series(cf)
         cfg.append(cf)
 

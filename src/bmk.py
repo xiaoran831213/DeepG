@@ -40,7 +40,7 @@ def knreg(xT, yT, xV=None, yV=None):
     # fitting
     # alpha, kernel, and degree
     a = [.0]  # , .1, .2, .5, 1., 2., 5.]
-    k = ['linear', 'rbf', 'laplacian', 'sigmoid', 'cosine']
+    k = ['linear', 'rbf', 'laplacian', 'cosine']  # 'sigmoid'
     cfg = cat(cpd(a, k, [None]), cpd(a, ['poly'], [1, 2, 3]))
     ret = list()
     for a, k, d in cfg:

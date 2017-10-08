@@ -34,6 +34,7 @@
 \newcommand{\mean}[2]{\left\langle{#1}\right\rangle_{#2}}
 % vector, matrices
 \newcommand{\vs}{\bs{s}}
+\newcommand{\vst}{\bs{\tilde{s}}}
 % derivative
 \newcommand{\DRV}[2]{\frac{d #1}{d #2}}
 \newcommand{\DRC}[3]{\DRV{#1}{#2}\DRV{#2}{#3}}
@@ -61,11 +62,19 @@ East Lansing, MI 48824--1030\\
 \clearpage
 \chapter{The Ising Magnetic Systems}
 \section{General principles of the statistical mechanics}
-The state of a system is represented by $N$-d variable $\vs=[s_1, s_2, \dots, s_N]^T$. An observable quantity of the system is a function of its state $A(\vs)$. The form of $A$ is versatile, but the most basic one is called \textit{engery} $H$, a function defined on $\vs: H = H(\vs)$ that characterize each state, and further characterize the dynamic behavior of the system.
+\newcommand{\hf}{H}
+\newcommand{\ef}{E}
+\newcommand{\pf}{P}
+\newcommand{\ps}{P(\vs)}
+\newcommand{\pst}{\pf(\vst)}
+\newcommand{\es}{\ef(\vs)}
+\newcommand{\est}{\ef(\vst)}
+\newcommand{\me}{\mathcal{\bs{\ef}}}
+The state of a system is represented by $N$-d variable $\vs=[s_1, s_2, \dots, s_N]^T$. An observable quantity of the system is a function of its state $A(\vs)$. The form of $A$ is versatile, but the most basic one is called \textit{engery} $\ef = \ef(\vs)$ that characterize each state, and further governs the dynamic behavior of the system.
 
-In most cases the mean quantity $A$ holds the best interests, which can be formally obtained via a infinitely long peroid of observation:
+In most cases the mean of $A$ holds better interests than $A(\vs)$ at particular moments, which can be formally obtained via a infinitely long peroid of observation:
 \begin{equation} \label{eq:mu(A,t)}
-  \mean{A}{t} = \lim_{t \to \infty}\frac{1}{t} \int_0^t A(\vs^{(t)})  dt
+  \mean{A}{t} = \lim_{t \to \infty}\frac{1}{t} \int_0^t A(\vs^t) dt
 \end{equation}
 The equilibrium statistical mechanics states that, after a infinitely long period of observation, the system has ``visited'' its distinct states many times, and therefore the mean over time in Eq.\,\eqref{eq:mu(A,t)} can be replaced by the mean over \textit{assemble} of the states:
 \begin{align}\label{eq:mu(A,s)}
@@ -77,27 +86,33 @@ Here, $\Pr(\vs)$ is the \textit{probability density function} (PDF) of the sytem
 \end{align}
 in order to be a valid PDF.
 
-To characterize the probility distribution $\Pr(\vs)$ itself, statistical mechanics introduces the concept of entropy $S$, which is defined as the mean negative logarithm of the density itself:
+To characterize the distribution of states $\pf = \ps$, statistical mechanics introduces the concept of entropy, defined by the mean negative logarithm of the density itself:
 \begin{align}
-  S = \mean{-\log{P(\vs)}}{\vs} = \int{[-\log{P(\vs)}]P(\vs)d\vs}.
+  \hf = \mean{-\log{\ps}}{\vs} = -\int{\ps\log{\ps}\,d\vs}.
 \end{align}
-Entropy is non-negative, it measures how chaotic the system is. In general, the flatter the distribution $P$ is, the larger the entroy $S$ become (i.e.\, so un-ordered that many states have a fair chance to occue); on the countrary, a point mass distribution $\delta(s_0)$ has 0 entropy (i.e.\, extremely ordered that only one state dominants the system)
+Entropy is non-negative, it measures how chaotic the system is. In general, the flatter the distribution $P$ is, the larger the entroy $\hf$ become (i.e.\, so disordered that many states have similar chance to occue); on the contrary, a point mass distribution $\delta(\vs_0)$ has 0 entropy (i.e.\, extremely ordered that a single state $\vs_0$ dominants the system).
 
-\textbf{work out the general form of Pr(\textbf{s})} \\
-Nature dictates that:\\
-(1) without interference (e.g., chane of temperature or pressure), the mean system ergery
-\begin{align}
-  E = \mean{H(\vs)}{\vs} = \int_{\vs} H(\vs)\Pr(\vs) d\vs
+\textbf{work out the general form of $\pf = \ps$} \\
+The law of nature dictates that, without external interference (e.g., chane of temperature or pressure),
+\begin{itemize}
+\item the mean system ergery
+\begin{align} \label{eq:e=mu(h)}
+  \me = \mean{\ef}{\vs} = \int_{\vs} \es \ps d\vs
+\end{align} is conserved;
+\item when the system achieves equilibrium, it is also at the most disordered dynamics as possible, without breaking the previous rule \eqref{eq:e=mu(h)};
+\end{itemize}
+in other words, the choice of state distribution $\pf$ must maximize the entropy $\hf$ under the rule of energy conservation \eqref{eq:e=mu(h)} and probability normalization \eqref{eq:int(p)=1}, collectively expressed by the following optimization objective
+\begin{align}\label{eq:max(e, p)}
+  L(\ps, \lambda, \gamma) = -\int_{\vs}\ps\log{\ps}\,d\vs - \beta(\int_{\vs} {\es\ps\,d\vs} - \me) - \gamma(\int_{\vs}{\ps\,d\vs} - 1)
 \end{align}
-is conserved; 
-(2) when it researches thermal equilibrium, the entrophy $S$ is at possible maximum, that is, $\PDV{S}{a}=0$. These rules, coupled with Eq.\,\eqref{eq:int(p)=1} implies the relationship between the forms of energy $H(\vs)$ and probability $\Pr(\vs)$ as
-\begin{equation}
-  \begin{split}
-    \PDV{S}{\vs} = 0 
-    \quad\textrm{s.t.}\quad\int{H(\vs)P(\vs)d\vs} = E \textrm{, and} \int{P(\vs)d\vs} = 1.
-  \end{split}
-\end{equation}
-
+where $\beta$, $\gamma$ are Lagrange multipliers, and $L(\ps; \beta, \gamma)$ is to be maximized. The derivative of $L$ w.r.t. $\{\ps, \beta, \gamma\}$ is
+\begin{equation*}
+  \begin{cases}
+    \PDV{L}{\ps}      & = -log{\ps} - 1 - \beta\es -\gamma \\
+    \PDV{L}{\beta}    & = -\int_{\vst} \left[\est\pst + 1\right] d\vst + \me\\
+    \PDV{L}{\gamma}   & = -\int_{\vst} \pst  d\vst + 1
+  \end{cases}
+\end{equation*}
 \clearpage
 \singlespacing
 \bibliographystyle{\style}

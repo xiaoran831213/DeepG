@@ -15,12 +15,10 @@ from xnnt.tnr.basb import Base as Tnr
 from xutl import spz, lpz
 
 from gsm import sim
-from bunch import Bunch
 
 
 # r=main('../1kg/rnd/0009', sav='../tmp', lr=3e-3, nptr=[], N=500, P=3000, rsq=1.0, nep=0)
-# r.bmk[np.logical_or(r.bmk.par=='verr', r.bmk.mtd!='nnt')]
-# r.bmk[np.logical_or(r.bmk.par=='vcor', r.bmk.mtd!='nnt')]
+# r=main('../1kg/rnd/0000', sav='../tmp', lr=2e-2, N=625, P=3000, dim=[1000, 100, 100], frq=.3, fam='sin0.5', rsq=1.0, nep=200)
 def main(fnm, **kwd):
     """ the fine-tune procedure for Stacked Autoencoder(SAE).
     -- fnm: filename to the input data.

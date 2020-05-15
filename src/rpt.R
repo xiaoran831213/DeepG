@@ -83,7 +83,7 @@ plt <- function(su, x.axi='r2', grid=nhf~mdl, x.cat=F, out=NULL)
         gy <- 1
     }
     
-    g <- g + geom_line(aes(x=x, y=pow, color=test, group=test))
+    g <- g + geom_line(aes(x=x, y=pow, color=test, group=test), size=1)
     g <- g + xlab(x.axi)
     g <- g + ylab('pow')
     g <- g + ggtitle(tl)
@@ -106,17 +106,10 @@ tmp <- function()
     p2=plt(subset(s, se=-c(pvl.ibs, pvl.xmx)), 'r2', m, out='rpt/img/rsq_ggg_gau_dsg.png')
     p3=plt(subset(s, se=-c(pvl.ibs, pvl.dsg)), 'r2', m, out='rpt/img/rsq_ggg_gau_xmx.png')
 
-    s1 <- sum.rpt(readRDS('rpt/rsq_gxg_fp1.rds'))
-    s2 <- sum.rpt(readRDS('rpt/rsq_gno_fp1.rds'))
-    s <- rbind(s1, s2)
-    p1=plt(subset(s, T, -c(pvl.dsg, pvl.xmx)), 'r2', m, out='rpt/img/rsq_fp1_ibs.png')
-    p2=plt(subset(s, T, -c(pvl.ibs, pvl.xmx)), 'r2', m, out='rpt/img/rsq_fp1_dsg.png')
-    p3=plt(subset(s, T, -c(pvl.ibs, pvl.dsg)), 'r2', m, out='rpt/img/rsq_fp1_xmx.png')
-
-    s <- sum.rpt(readRDS('rpt/rsq_gxg_fp5.rds'))
-    p1=plt(subset(s, T, -c(pvl.dsg, pvl.xmx)), 'r2', m, out='rpt/img/rsq_gxg_fp5_ibs.png')
-    p2=plt(subset(s, T, -c(pvl.ibs, pvl.xmx)), 'r2', m, out='rpt/img/rsq_gxg_fp5_dsg.png')
-    p3=plt(subset(s, T, -c(pvl.ibs, pvl.dsg)), 'r2', m, out='rpt/img/rsq_gxg_fp5_xmx.png')
+    s <- sum.rpt(readRDS('rpt/rsq_g4b.rds')); m <- mdl ~ wdp
+    p1=plt(subset(s, T, -c(pvl.dsg, pvl.xmx)), 'r2', m, out='rpt/img/rsq_g4b_ibs.png')
+    p2=plt(subset(s, T, -c(pvl.ibs, pvl.xmx)), 'r2', m, out='rpt/img/rsq_g4b_dsg.png')
+    p3=plt(subset(s, T, -c(pvl.ibs, pvl.dsg)), 'r2', m, out='rpt/img/rsq_g4b_xmx.png')
 
     s <- sum.rpt(readRDS('rpt/rsq_gxg_sin.rds'))
     p1=plt(subset(s, T, -c(pvl.dsg, pvl.xmx)), 'r2', m, out='rpt/img/rsq_gxg_sin_ibs.png')

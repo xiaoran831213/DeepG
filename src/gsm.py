@@ -12,7 +12,9 @@ def sim(gmx, **kwd):
 
     ** fam: distribution family of simulated responses
     -- gau: gaussian
-    -- sin: sin
+    -- sin: sin,
+    --      'sin?.?' rescale the standard deviation of input to ?.? * pi.
+    --      'sin' rescale the standard deviation of input to the default 0.5 * pi.
     -- bin: binomial
 
     ** mdl: the underlying linear model, and base expansions
@@ -24,6 +26,8 @@ def sim(gmx, **kwd):
     -- g:g: cross product terms
     -- g^2: squared ter
     -- g*g: all terms up to the 2nd order (g + g:g + g^2).
+
+    ** sgm: covariance between functional variants?
 
     ** fpr: proportion of parity terms with in functional variants.
     it is 1 by defaut.
@@ -74,7 +78,7 @@ def sim(gmx, **kwd):
             gmx = np.array([1, -1])[idx, np.newaxis]
     P = gmx.shape[1]
 
-    # remove uninformative bases
+    # remove uninformative base expansion
     gmx = gmx[:, gmx.std(0) > 0]
     if gmx.shape[1] < P:
         print('SIM: drop', P - gmx.shape[1], 'null-info base expansion.')
@@ -86,7 +90,7 @@ def sim(gmx, **kwd):
     #     print('SIM: drop', P - gmx.shape[1], 'duplicate base expansion.')
     #     P = gmx.shape[1]
 
-    # weights drawn from Gaussian
+    # true weights drawn from Gaussian
     w = normal(size=[P, 1])
 
     # simulate signal
@@ -104,10 +108,10 @@ def sim(gmx, **kwd):
     # put through link function
     fam = kwd.get('fam', 'gau')
     if fam.startswith('sin'):
-        # number of periods
+        # number of periods in PI, "sin3.2" means 3.2 * PI
         _np = float(fam[3:]) if len(fam) > 3 else 0.5
         print('SM: STD= ', xw.std())
-        xw = xw / xw.std() * _np
+        xw = xw / xw.std() * _np * np.pi
         print('SM: STD= ', xw.std())
         y = np.sin(xw)
     elif fam == 'bin':

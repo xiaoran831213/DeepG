@@ -17,7 +17,7 @@ from xutl import spz, lpz
 from gsm import sim
 
 
-# r=main('../1kg/rnd/0000', seed=1, sav='../tmp', lr=1e-3, N=625, P=2000, dim=[4000, 50], frq=.5, fam='sin2.5', hvp=30, nep=500)
+# r=main('../1kg/rnd/0000', seed=1, sav='../tmp', lr=1e-3, N=1250, P=1000, dim=[500]*4, frq=.5, fam='sin2.5', hvp=30, nep=500)
 def main(fnm, **kwd):
     """ the fine-tune procedure for Stacked Autoencoder(SAE).
     -- fnm: filename to the input data.
@@ -260,7 +260,7 @@ def collect(fdr='.', nrt=None, out=None, csv=None):
         cf = ['fam', 'xtp', 'frq', 'mdl', 'rsq', 'gdy', 'gtp']
         cf = dict((k, v) for k, v in pgz.items() if k in cf)
         cf['nxp'] = '{}x{}'.format(pgz['gmx'].shape[0], pgz['gmx'].shape[2])
-        cf['nwk'] = pgz['dim']
+        cf['nwk'] = '_'.join('{:4d}'.format(_) for _ in pgz['dim'])
         cf = pd.Series(cf)
         cfg.append(cf)
 
@@ -396,7 +396,7 @@ def plot_hist(sim, out=None, gui=0):
 
 
 # r1, p1 = plt1('~/1x1_gno.pgz')
-def plt1(rpt, key='REL', log=True):
+def plt1(rpt, key='REL', max_val=5.0, log=True):
     """ plot supervised learning report. """
     # load report form file if necessary.
     sim = ['fam', 'frq', 'mdl', 'nxp']
@@ -418,6 +418,7 @@ def plt1(rpt, key='REL', log=True):
     # plot of relative error
     err = bmk[bmk.key == key].loc[:, nnt + mtd + ['val']]
     err = err[err.mtd != 'nul']
+    err = err[err.val <= max_val]
 
     # sample some data points to craft boxplot states
     X, L = [], []

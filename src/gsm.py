@@ -57,14 +57,14 @@ def sim(gmx, **kwd):
         P = gmx.shape[1]
 
     # pick functional variants
-    P = int(gmx.shape[1] * kwd.get('frq', 0.25))
+    P = int(gmx.shape[1] * kwd.get('frq', 0.50))
     gmx = gmx[:, np.random.permutation(range(gmx.shape[1]))[:P]]
 
     # base expansion
-    if ':' in mdl or '*' in mdl:  # crossover
+    if ':' in mdl:              # crossover
         cmb = it.combinations(range(P), 2)
         gmx = np.array([gmx[:, i] * gmx[:, j] for i, j in cmb]).T
-    if '^' in mdl or '*' in mdl:  # full 2nd order
+    if '*' in mdl:              # full 2nd order
         cmb = it.combinations_with_replacement(range(P), 2)
         emx = np.array([gmx[:, i] * gmx[:, j] for i, j in cmb]).T
         gmx = np.hstack([gmx, emx])
@@ -90,11 +90,22 @@ def sim(gmx, **kwd):
     #     print('SIM: drop', P - gmx.shape[1], 'duplicate base expansion.')
     #     P = gmx.shape[1]
 
+<<<<<<< HEAD
     # true weights drawn from Gaussian
     w = normal(size=[P, 1])
 
+=======
+    # latent weights drawn from Gaussian
+    ltn = kwd.get('ltn', [])
+    xw = gmx
+    for u, v in zip([P] + ltn, ltn + [1]):
+        _w = normal(size=[u, v])
+        _x = 1 / (1 + np.exp(-xw))
+        xw = np.dot(_x, _w)
+>>>>>>> 6a9cde2787b3240c886f2df772fd2c8e46cdc4e2
     # simulate signal
-    xw = np.dot(gmx, w)         # linear signal
+    # w = normal(size=[P, 1])
+    # xw = np.dot(gmx, w)         # linear signal
 
     # mix with noise
     rsq = kwd.get('rsq', 0.30)
@@ -108,12 +119,19 @@ def sim(gmx, **kwd):
     # put through link function
     fam = kwd.get('fam', 'gau')
     if fam.startswith('sin'):
+<<<<<<< HEAD
         # number of periods in PI, "sin3.2" means 3.2 * PI
         _np = float(fam[3:]) if len(fam) > 3 else 0.5
         print('SM: STD= ', xw.std())
         xw = xw / xw.std() * _np * np.pi
         print('SM: STD= ', xw.std())
         y = np.sin(xw)
+=======
+        # number of periods
+        alpha = kwd.get('alpha', 1.0)
+        _np = float(fam[3:]) if len(fam) > 3 else 1.0
+        y = eta + np.sin(xw / xw.std() * _np * np.pi) * eta.std() * alpha
+>>>>>>> 6a9cde2787b3240c886f2df772fd2c8e46cdc4e2
     elif fam == 'bin':
         mu = rsq/(1 + np.exp(-xw)) + (1 - rsq) * 0.5
         y = np.random.binomial(1, mu).reshape(N, 1)
